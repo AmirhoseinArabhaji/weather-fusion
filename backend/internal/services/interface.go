@@ -9,6 +9,6 @@ import (
 
 // WeatherService defines the business operations for weather data.
 type WeatherService interface {
-	GetCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherData, error)
-	GetForecast(ctx context.Context, req models.WeatherRequest) (*models.Forecast, error)
+	// GetCurrent returns the consensus weather for a location (cache-aside).
+	GetCurrent(ctx context.Context, req models.WeatherRequest) (*models.ConsensusResult, error)
 }

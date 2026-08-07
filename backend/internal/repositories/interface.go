@@ -9,9 +9,12 @@ import (
 
 // WeatherRepository abstracts all weather-related database operations.
 type WeatherRepository interface {
-	SaveCurrent(ctx context.Context, data *models.WeatherData) error
-	GetLatestByCity(ctx context.Context, city string) (*models.WeatherData, error)
-	GetHistoryByCity(ctx context.Context, city string, page, pageSize int) ([]*models.WeatherData, int, error)
-	SaveForecast(ctx context.Context, forecast *models.Forecast) error
-	GetForecastByCity(ctx context.Context, city string) (*models.Forecast, error)
+	// SaveObservation persists a normalised provider observation (async, non-blocking path).
+	SaveObservation(ctx context.Context, obs *models.WeatherObservation) error
+
+	// GetLatestByCity returns the most recent cached observation for a city across all providers.
+	GetLatestByCity(ctx context.Context, city string) ([]*models.WeatherObservation, error)
+
+	// GetHistoryByCity returns paginated historical observations for a city.
+	GetHistoryByCity(ctx context.Context, city string, page, pageSize int) ([]*models.WeatherObservation, int, error)
 }

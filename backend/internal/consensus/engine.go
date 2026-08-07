@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"log/slog"
+	"math"
 
 	"github.com/amirhosein/weather-fusion/internal/models"
 	"github.com/amirhosein/weather-fusion/internal/providers"
@@ -12,7 +13,7 @@ import (
 
 // Engine combines data from multiple providers.
 type Engine interface {
-	// Current returns a merged WeatherData from all healthy providers.
+	// Current fetches from all healthy providers and returns a merged ConsensusResult.
 	Current(ctx context.Context, req models.WeatherRequest) (*models.ConsensusResult, error)
 }
 
@@ -30,71 +31,122 @@ func NewEngine(provs []providers.WeatherProvider, log *slog.Logger) Engine {
 	}
 }
 
-// Current collects current weather from all providers, then averages numeric
-// fields and picks the most common condition.
-//
-// TODO: implement a proper weighted-average or Bayesian consensus strategy.
+// Current collects current weather from all providers, averages numeric fields,
+// picks the most common condition, and calculates a confidence score based on
+// how much providers agree on temperature.
 func (e *engine) Current(ctx context.Context, req models.WeatherRequest) (*models.ConsensusResult, error) {
-	var results []*models.WeatherData
-	var sources []string
+	var observations []*models.WeatherObservation
 
 	for _, p := range e.providers {
 		if !p.IsHealthy(ctx) {
 			e.log.WarnContext(ctx, "provider unhealthy, skipping", "provider", p.Name())
 			continue
 		}
-		data, err := p.FetchCurrent(ctx, req)
+		obs, err := p.FetchCurrent(ctx, req)
 		if err != nil {
 			e.log.ErrorContext(ctx, "provider fetch error", "provider", p.Name(), "error", err)
 			continue
 		}
-		results = append(results, data)
-		sources = append(sources, p.Name())
+		observations = append(observations, obs)
 	}
 
-	if len(results) == 0 {
+	if len(observations) == 0 {
 		return nil, &providerError{msg: "no providers returned data"}
 	}
 
-	merged := average(results)
+	avgTemp, stdDev := temperatureStats(observations)
+	avgHumidity := averageHumidity(observations)
+	avgWind := averageWindSpeed(observations)
+	avgPrecip := averagePrecipProb(observations)
+	condition := majorityCondition(observations)
+	confidence := confidenceScore(len(observations), len(e.providers), stdDev)
+
 	return &models.ConsensusResult{
-		WeatherData: *merged,
-		Confidence:  confidenceScore(len(results), len(e.providers)),
-		Sources:     sources,
+		Location:    observations[0].Location,
+		Temperature: avgTemp,
+		TempStdDev:  stdDev,
+		Humidity:    avgHumidity,
+		WindSpeed:   avgWind,
+		PrecipProb:  avgPrecip,
+		Condition:   condition,
+		Confidence:  confidence,
+		Providers:   dereferenceAll(observations),
 	}, nil
 }
 
-// average computes the mean of numeric weather fields across provider results.
-func average(results []*models.WeatherData) *models.WeatherData {
-	n := float64(len(results))
-	merged := &models.WeatherData{
-		Location:  results[0].Location,
-		Condition: results[0].Condition, // TODO: pick majority condition
-		Provider:  "consensus",
+func temperatureStats(obs []*models.WeatherObservation) (avg, stdDev float64) {
+	n := float64(len(obs))
+	for _, o := range obs {
+		avg += o.Temperature
 	}
-	for _, r := range results {
-		merged.Temperature += r.Temperature
-		merged.FeelsLike += r.FeelsLike
-		merged.Humidity += r.Humidity
-		merged.Pressure += r.Pressure
-		merged.WindSpeed += r.WindSpeed
-		merged.UVIndex += r.UVIndex
+	avg /= n
+	for _, o := range obs {
+		diff := o.Temperature - avg
+		stdDev += diff * diff
 	}
-	merged.Temperature /= n
-	merged.FeelsLike /= n
-	merged.Humidity = int(float64(merged.Humidity) / n)
-	merged.Pressure /= n
-	merged.WindSpeed /= n
-	merged.UVIndex /= n
-	return merged
+	stdDev = math.Sqrt(stdDev / n)
+	return
 }
 
-// confidenceScore is a simple ratio: providers that responded vs total registered.
-func confidenceScore(responded, total int) float64 {
+func averageHumidity(obs []*models.WeatherObservation) float64 {
+	var sum float64
+	for _, o := range obs {
+		sum += float64(o.Humidity)
+	}
+	return sum / float64(len(obs))
+}
+
+func averageWindSpeed(obs []*models.WeatherObservation) float64 {
+	var sum float64
+	for _, o := range obs {
+		sum += o.WindSpeed
+	}
+	return sum / float64(len(obs))
+}
+
+func averagePrecipProb(obs []*models.WeatherObservation) float64 {
+	var sum float64
+	for _, o := range obs {
+		sum += o.PrecipProb
+	}
+	return sum / float64(len(obs))
+}
+
+// majorityCondition picks the most frequently reported condition across providers.
+func majorityCondition(obs []*models.WeatherObservation) models.WeatherCondition {
+	counts := make(map[models.WeatherCondition]int)
+	for _, o := range obs {
+		counts[o.Condition]++
+	}
+	var best models.WeatherCondition
+	var max int
+	for cond, count := range counts {
+		if count > max {
+			best = cond
+			max = count
+		}
+	}
+	return best
+}
+
+// confidenceScore combines provider response ratio with temperature agreement.
+// High stdDev = low confidence even if all providers responded.
+func confidenceScore(responded, total int, tempStdDev float64) float64 {
 	if total == 0 {
 		return 0
 	}
-	return float64(responded) / float64(total)
+	responsePart := float64(responded) / float64(total)
+	// penalise: stdDev > 5°C starts to significantly reduce confidence
+	agreementPart := math.Max(0, 1.0-(tempStdDev/5.0))
+	return math.Min(1.0, (responsePart+agreementPart)/2.0)
+}
+
+func dereferenceAll(obs []*models.WeatherObservation) []models.WeatherObservation {
+	out := make([]models.WeatherObservation, len(obs))
+	for i, o := range obs {
+		out[i] = *o
+	}
+	return out
 }
 
 // providerError is a local error type for consensus failures.

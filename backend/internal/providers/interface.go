@@ -15,10 +15,10 @@ type WeatherProvider interface {
 	Name() string
 
 	// FetchCurrent retrieves the current weather conditions for the given location.
-	FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherData, error)
+	FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error)
 
 	// FetchForecast retrieves a multi-day forecast for the given location.
-	FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.Forecast, error)
+	FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error)
 
 	// IsHealthy returns true if the provider's API is reachable.
 	IsHealthy(ctx context.Context) bool

@@ -34,27 +34,28 @@ func New(apiKey, baseURL string, log *slog.Logger) providers.WeatherProvider {
 
 func (p *Provider) Name() string { return providerName }
 
-func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherData, error) {
+func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
 	// TODO: call GET {baseURL}/weather?q={city}&appid={apiKey}&units=metric
 	p.log.DebugContext(ctx, "fetch current (stub)", "city", req.City)
-	return &models.WeatherData{
+	return &models.WeatherObservation{
 		Location:    models.Location{City: req.City},
+		Provider:    providerName,
 		Temperature: 20.0,
 		Condition:   models.ConditionClear,
 		Description: "stub: clear sky",
-		Provider:    providerName,
 		ObservedAt:  time.Now().UTC(),
+		FetchedAt:   time.Now().UTC(),
 	}, nil
 }
 
-func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.Forecast, error) {
+func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error) {
 	// TODO: call GET {baseURL}/forecast?q={city}&appid={apiKey}&units=metric
 	p.log.DebugContext(ctx, "fetch forecast (stub)", "city", req.City)
 	days := req.Days
 	if days == 0 {
 		days = 7
 	}
-	forecast := &models.Forecast{
+	forecast := &models.ProviderForecast{
 		Location:  models.Location{City: req.City},
 		Provider:  providerName,
 		FetchedAt: time.Now().UTC(),
@@ -72,6 +73,5 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {
-	// TODO: implement a lightweight ping (e.g. HEAD request to base URL)
 	return p.apiKey != ""
 }
