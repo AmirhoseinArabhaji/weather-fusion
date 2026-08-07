@@ -1,12 +1,16 @@
-// Package openweather implements the WeatherProvider interface for OpenWeatherMap API.
+// Package openweather implements the WeatherProvider interface for OpenWeatherMap's
+// free Current Weather Data API (data/2.5/weather).
 package openweather
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/amirhosein/weather-fusion/internal/models"
@@ -35,31 +39,141 @@ func New(apiKey, baseURL string, log *slog.Logger) providers.WeatherProvider {
 
 func (p *Provider) Name() string { return providerName }
 
-func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
-	// TODO: call GET {baseURL}/weather?q={city}&appid={apiKey}&units=metric
-	p.log.DebugContext(ctx, "fetch current (stub)", "city", req.City)
+// weatherResponse mirrors the data/2.5/weather response shape.
+type weatherResponse struct {
+	Coord struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+	} `json:"coord"`
+	Weather []weatherDescriptor `json:"weather"`
+	Main    struct {
+		Temp      float64 `json:"temp"`
+		FeelsLike float64 `json:"feels_like"`
+		Pressure  float64 `json:"pressure"`
+		Humidity  int     `json:"humidity"`
+	} `json:"main"`
+	Visibility float64 `json:"visibility"`
+	Wind       struct {
+		Speed float64 `json:"speed"`
+		Deg   int     `json:"deg"`
+	} `json:"wind"`
+	Dt   int64 `json:"dt"`
+	Sys  struct {
+		Country string `json:"country"`
+	} `json:"sys"`
+	Name string `json:"name"`
+	Cod  int    `json:"cod"`
+}
 
-	// raw shape mimics OpenWeatherMap's actual current-weather response, marked as
-	// a stub so it's obvious in testing that this isn't a real provider payload.
-	rawResponse, _ := json.Marshal(map[string]any{
-		"name": req.City,
-		"main": map[string]any{"temp": 20.0, "humidity": 55},
-		"weather": []map[string]any{
-			{"main": "Clear", "description": "clear sky"},
-		},
-		"stub": true,
-	})
+type weatherDescriptor struct {
+	ID          int    `json:"id"`
+	Main        string `json:"main"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+}
+
+func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
+	reqURL := p.buildCurrentURL(req)
+
+	raw, err := p.get(ctx, reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("openweather: fetch current: %w", err)
+	}
+
+	var parsed weatherResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("openweather: decode response: %w", err)
+	}
+
+	condition := models.ConditionUnknown
+	description := ""
+	if len(parsed.Weather) > 0 {
+		condition = mapCondition(parsed.Weather[0].Main)
+		description = parsed.Weather[0].Description
+	}
 
 	return &models.WeatherObservation{
-		Location:    models.Location{City: req.City},
+		Location: models.Location{
+			City:      parsed.Name,
+			Country:   parsed.Sys.Country,
+			Latitude:  parsed.Coord.Lat,
+			Longitude: parsed.Coord.Lon,
+		},
 		Provider:    providerName,
-		Temperature: 20.0,
-		Condition:   models.ConditionClear,
-		Description: "stub: clear sky",
-		RawResponse: rawResponse,
-		ObservedAt:  time.Now().UTC(),
+		Temperature: parsed.Main.Temp,
+		FeelsLike:   parsed.Main.FeelsLike,
+		Humidity:    parsed.Main.Humidity,
+		Pressure:    parsed.Main.Pressure,
+		WindSpeed:   parsed.Wind.Speed,
+		WindDir:     parsed.Wind.Deg,
+		Visibility:  parsed.Visibility / 1000, // metres -> km
+		Condition:   condition,
+		Description: description,
+		RawResponse: raw,
+		ObservedAt:  time.Unix(parsed.Dt, 0).UTC(),
 		FetchedAt:   time.Now().UTC(),
 	}, nil
+}
+
+// buildCurrentURL prefers city name (native to this endpoint); falls back to lat/lon.
+func (p *Provider) buildCurrentURL(req models.WeatherRequest) string {
+	params := url.Values{}
+	params.Set("appid", p.apiKey)
+	params.Set("units", "metric")
+	if req.City != "" {
+		params.Set("q", req.City)
+	} else {
+		params.Set("lat", fmt.Sprintf("%f", req.Lat))
+		params.Set("lon", fmt.Sprintf("%f", req.Lon))
+	}
+	return fmt.Sprintf("%s/weather?%s", p.baseURL, params.Encode())
+}
+
+// get performs a GET request and returns the raw response body, treating any
+// non-2xx status as an error.
+func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
+}
+
+// mapCondition normalises OpenWeatherMap's "main" weather group into our
+// shared WeatherCondition enum.
+func mapCondition(main string) models.WeatherCondition {
+	switch strings.ToLower(main) {
+	case "clear":
+		return models.ConditionClear
+	case "clouds":
+		return models.ConditionCloudy
+	case "rain", "drizzle":
+		return models.ConditionRain
+	case "snow":
+		return models.ConditionSnow
+	case "thunderstorm":
+		return models.ConditionThunder
+	case "mist", "fog", "haze", "smoke", "dust", "sand", "ash", "squall", "tornado":
+		return models.ConditionFog
+	default:
+		return models.ConditionUnknown
+	}
 }
 
 func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error) {
