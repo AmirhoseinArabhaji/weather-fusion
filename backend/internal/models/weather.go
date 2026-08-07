@@ -92,8 +92,9 @@ type ConsensusResult struct {
 
 // WeatherRequest carries the inbound query parameters.
 type WeatherRequest struct {
-	City string  `form:"city" binding:"required_without=Lat"`
-	Lat  float64 `form:"lat"`
-	Lon  float64 `form:"lon"`
-	Days int     `form:"days" binding:"omitempty,min=1,max=14"`
+	City  string  `form:"city" binding:"required_without=Lat"`
+	Lat   float64 `form:"lat"`
+	Lon   float64 `form:"lon"`
+	Days  int     `form:"days" binding:"omitempty,min=1,max=14"`
+	Units string  `form:"units" binding:"omitempty,oneof=standard metric imperial"` // defaults to metric per provider
 }

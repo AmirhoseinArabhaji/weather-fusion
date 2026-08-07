@@ -51,16 +51,20 @@ type currentResponse struct {
 	Current struct {
 		LastUpdatedEpoch int64   `json:"last_updated_epoch"`
 		TempC            float64 `json:"temp_c"`
+		TempF            float64 `json:"temp_f"`
 		Condition        struct {
 			Text string `json:"text"`
 			Code int    `json:"code"`
 		} `json:"condition"`
 		WindKph    float64 `json:"wind_kph"`
+		WindMph    float64 `json:"wind_mph"`
 		WindDegree int     `json:"wind_degree"`
 		PressureMb float64 `json:"pressure_mb"`
 		Humidity   int     `json:"humidity"`
 		FeelslikeC float64 `json:"feelslike_c"`
+		FeelslikeF float64 `json:"feelslike_f"`
 		VisKm      float64 `json:"vis_km"`
+		VisMiles   float64 `json:"vis_miles"`
 		UV         float64 `json:"uv"`
 	} `json:"current"`
 }
@@ -69,6 +73,32 @@ type currentResponse struct {
 type apiError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// forecastResponse mirrors the /forecast.json response shape (only the
+// fields our DailyForecast model uses; hourly/astro/alerts are ignored).
+type forecastResponse struct {
+	Location struct {
+		Name string `json:"name"`
+	} `json:"location"`
+	Forecast struct {
+		Forecastday []struct {
+			DateEpoch int64 `json:"date_epoch"`
+			Day       struct {
+				MaxTempC        float64 `json:"maxtemp_c"`
+				MaxTempF        float64 `json:"maxtemp_f"`
+				MinTempC        float64 `json:"mintemp_c"`
+				MinTempF        float64 `json:"mintemp_f"`
+				AvgHumidity     float64 `json:"avghumidity"`
+				MaxWindKph      float64 `json:"maxwind_kph"`
+				MaxWindMph      float64 `json:"maxwind_mph"`
+				DailyChanceRain float64 `json:"daily_chance_of_rain"`
+				Condition       struct {
+					Text string `json:"text"`
+				} `json:"condition"`
+			} `json:"day"`
+		} `json:"forecastday"`
+	} `json:"forecast"`
 }
 
 func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
@@ -84,6 +114,11 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		return nil, fmt.Errorf("weatherapi: decode response: %w", err)
 	}
 
+	temp, feelsLike, windSpeed, visibility := parsed.Current.TempC, parsed.Current.FeelslikeC, parsed.Current.WindKph/3.6, parsed.Current.VisKm
+	if req.Units == "imperial" {
+		temp, feelsLike, windSpeed, visibility = parsed.Current.TempF, parsed.Current.FeelslikeF, parsed.Current.WindMph, parsed.Current.VisMiles
+	}
+
 	return &models.WeatherObservation{
 		Location: models.Location{
 			City:      parsed.Location.Name,
@@ -93,13 +128,13 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 			Timezone:  parsed.Location.TzID,
 		},
 		Provider:    providerName,
-		Temperature: parsed.Current.TempC,
-		FeelsLike:   parsed.Current.FeelslikeC,
+		Temperature: temp,
+		FeelsLike:   feelsLike,
 		Humidity:    parsed.Current.Humidity,
 		Pressure:    parsed.Current.PressureMb,
-		WindSpeed:   parsed.Current.WindKph / 3.6, // kph -> m/s
+		WindSpeed:   windSpeed,
 		WindDir:     parsed.Current.WindDegree,
-		Visibility:  parsed.Current.VisKm,
+		Visibility:  visibility,
 		UVIndex:     parsed.Current.UV,
 		Condition:   mapCondition(parsed.Current.Condition.Text),
 		Description: parsed.Current.Condition.Text,
@@ -114,12 +149,17 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 func (p *Provider) buildCurrentURL(req models.WeatherRequest) string {
 	params := url.Values{}
 	params.Set("key", p.apiKey)
-	if req.City != "" {
-		params.Set("q", req.City)
-	} else {
-		params.Set("q", fmt.Sprintf("%f,%f", req.Lat, req.Lon))
-	}
+	params.Set("q", cityOrCoords(req))
 	return fmt.Sprintf("%s/current.json?%s", p.baseURL, params.Encode())
+}
+
+// cityOrCoords formats a request as WeatherAPI's "q" value: city name if
+// present, else "lat,lon".
+func cityOrCoords(req models.WeatherRequest) string {
+	if req.City != "" {
+		return req.City
+	}
+	return fmt.Sprintf("%f,%f", req.Lat, req.Lon)
 }
 
 // get performs a GET request and returns the raw response body. Non-2xx
@@ -177,29 +217,181 @@ func mapCondition(text string) models.WeatherCondition {
 }
 
 func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error) {
-	// TODO: call GET {baseURL}/forecast.json?key={apiKey}&q={city}&days={n}
-	p.log.DebugContext(ctx, "fetch forecast (stub)", "city", req.City)
 	days := req.Days
 	if days == 0 {
 		days = 7
 	}
-	forecast := &models.ProviderForecast{
-		Location:  models.Location{City: req.City},
-		Provider:  providerName,
-		FetchedAt: time.Now().UTC(),
+
+	raw, err := p.get(ctx, p.buildForecastURL(req, days))
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: fetch forecast: %w", err)
 	}
-	for i := 0; i < days; i++ {
+
+	var parsed forecastResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode forecast response: %w", err)
+	}
+
+	return buildProviderForecast(parsed, req, raw), nil
+}
+
+// buildProviderForecast maps a parsed forecastResponse (shared by /forecast.json
+// and /future.json) into our domain model, honoring req.Units.
+func buildProviderForecast(parsed forecastResponse, req models.WeatherRequest, raw []byte) *models.ProviderForecast {
+	forecast := &models.ProviderForecast{
+		Location:    models.Location{City: parsed.Location.Name},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for _, fd := range parsed.Forecast.Forecastday {
+		tempMin, tempMax, windSpeed := fd.Day.MinTempC, fd.Day.MaxTempC, fd.Day.MaxWindKph/3.6
+		if req.Units == "imperial" {
+			tempMin, tempMax, windSpeed = fd.Day.MinTempF, fd.Day.MaxTempF, fd.Day.MaxWindMph
+		}
 		forecast.Days = append(forecast.Days, models.DailyForecast{
-			Date:        time.Now().UTC().AddDate(0, 0, i),
-			TempMin:     14.0,
-			TempMax:     24.0,
-			Condition:   models.ConditionCloudy,
-			Description: fmt.Sprintf("stub day %d", i+1),
+			Date:        time.Unix(fd.DateEpoch, 0).UTC(),
+			TempMin:     tempMin,
+			TempMax:     tempMax,
+			Humidity:    int(fd.Day.AvgHumidity),
+			WindSpeed:   windSpeed,
+			PrecipProb:  fd.Day.DailyChanceRain / 100,
+			Condition:   mapCondition(fd.Day.Condition.Text),
+			Description: fd.Day.Condition.Text,
 		})
 	}
-	return forecast, nil
+	return forecast
+}
+
+// buildForecastURL prefers city name; falls back to "lat,lon".
+func (p *Provider) buildForecastURL(req models.WeatherRequest, days int) string {
+	params := url.Values{}
+	params.Set("key", p.apiKey)
+	params.Set("days", fmt.Sprintf("%d", days))
+	params.Set("q", cityOrCoords(req))
+	return fmt.Sprintf("%s/forecast.json?%s", p.baseURL, params.Encode())
 }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {
 	return p.apiKey != ""
+}
+
+// FetchFuture retrieves the forecast for a single date 14-365 days ahead
+// (WeatherAPI's /future.json). date must be "yyyy-MM-dd".
+func (p *Provider) FetchFuture(ctx context.Context, req models.WeatherRequest, date string) (*models.ProviderForecast, error) {
+	params := url.Values{}
+	params.Set("key", p.apiKey)
+	params.Set("q", cityOrCoords(req))
+	params.Set("dt", date)
+	reqURL := fmt.Sprintf("%s/future.json?%s", p.baseURL, params.Encode())
+
+	raw, err := p.get(ctx, reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: fetch future: %w", err)
+	}
+
+	// future.json's location/forecast.forecastday shape matches forecast.json.
+	var parsed forecastResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode future response: %w", err)
+	}
+
+	return buildProviderForecast(parsed, req, raw), nil
+}
+
+// IPLocation is the result of an IP geolocation lookup (/ip.json).
+type IPLocation struct {
+	IP          string  `json:"ip"`
+	City        string  `json:"city"`
+	Region      string  `json:"region"`
+	Country     string  `json:"country_name"`
+	CountryCode string  `json:"country_code"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	TzID        string  `json:"tz_id"`
+}
+
+// LookupIP resolves geolocation info for an IP address.
+func (p *Provider) LookupIP(ctx context.Context, ip string) (*IPLocation, error) {
+	params := url.Values{}
+	params.Set("key", p.apiKey)
+	params.Set("q", ip)
+	reqURL := fmt.Sprintf("%s/ip.json?%s", p.baseURL, params.Encode())
+
+	raw, err := p.get(ctx, reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: lookup ip: %w", err)
+	}
+
+	var loc IPLocation
+	if err := json.Unmarshal(raw, &loc); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode ip response: %w", err)
+	}
+	return &loc, nil
+}
+
+// LocationInfo is the result of a timezone/location lookup (/timezone.json).
+type LocationInfo struct {
+	Name           string  `json:"name"`
+	Region         string  `json:"region"`
+	Country        string  `json:"country"`
+	Lat            float64 `json:"lat"`
+	Lon            float64 `json:"lon"`
+	TzID           string  `json:"tz_id"`
+	LocaltimeEpoch int64   `json:"localtime_epoch"`
+	Localtime      string  `json:"localtime"`
+}
+
+// GetTimezone resolves location and local-time info for a city or coordinates.
+func (p *Provider) GetTimezone(ctx context.Context, req models.WeatherRequest) (*LocationInfo, error) {
+	params := url.Values{}
+	params.Set("key", p.apiKey)
+	params.Set("q", cityOrCoords(req))
+	reqURL := fmt.Sprintf("%s/timezone.json?%s", p.baseURL, params.Encode())
+
+	raw, err := p.get(ctx, reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: get timezone: %w", err)
+	}
+
+	var loc LocationInfo
+	if err := json.Unmarshal(raw, &loc); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode timezone response: %w", err)
+	}
+	return &loc, nil
+}
+
+// Astronomy holds sun/moon data for a location and date (/astronomy.json).
+type Astronomy struct {
+	Sunrise          string `json:"sunrise"`
+	Sunset           string `json:"sunset"`
+	Moonrise         string `json:"moonrise"`
+	Moonset          string `json:"moonset"`
+	MoonPhase        string `json:"moon_phase"`
+	MoonIllumination string `json:"moon_illumination"`
+}
+
+// GetAstronomy retrieves sunrise/sunset/moon data for a location and date.
+// date must be "yyyy-MM-dd", on or after 2015-01-01.
+func (p *Provider) GetAstronomy(ctx context.Context, req models.WeatherRequest, date string) (*Astronomy, error) {
+	params := url.Values{}
+	params.Set("key", p.apiKey)
+	params.Set("q", cityOrCoords(req))
+	params.Set("dt", date)
+	reqURL := fmt.Sprintf("%s/astronomy.json?%s", p.baseURL, params.Encode())
+
+	raw, err := p.get(ctx, reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: get astronomy: %w", err)
+	}
+
+	var parsed struct {
+		Astronomy struct {
+			Astro Astronomy `json:"astro"`
+		} `json:"astronomy"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode astronomy response: %w", err)
+	}
+	return &parsed.Astronomy.Astro, nil
 }

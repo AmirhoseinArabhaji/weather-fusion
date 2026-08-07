@@ -117,9 +117,14 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 
 // buildCurrentURL prefers city name (native to this endpoint); falls back to lat/lon.
 func (p *Provider) buildCurrentURL(req models.WeatherRequest) string {
+	units := req.Units
+	if units == "" {
+		units = "metric"
+	}
+
 	params := url.Values{}
 	params.Set("appid", p.apiKey)
-	params.Set("units", "metric")
+	params.Set("units", units)
 	if req.City != "" {
 		params.Set("q", req.City)
 	} else {
