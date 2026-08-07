@@ -3,6 +3,7 @@ package weatherapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -37,12 +38,25 @@ func (p *Provider) Name() string { return providerName }
 func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
 	// TODO: call GET {baseURL}/current.json?key={apiKey}&q={city}
 	p.log.DebugContext(ctx, "fetch current (stub)", "city", req.City)
+
+	// raw shape mimics weatherapi.com's actual current-weather response, marked as
+	// a stub so it's obvious in testing that this isn't a real provider payload.
+	rawResponse, _ := json.Marshal(map[string]any{
+		"location": map[string]any{"name": req.City},
+		"current": map[string]any{
+			"temp_c":    21.5,
+			"condition": map[string]any{"text": "Partly cloudy"},
+		},
+		"stub": true,
+	})
+
 	return &models.WeatherObservation{
 		Location:    models.Location{City: req.City},
 		Provider:    providerName,
 		Temperature: 21.5,
 		Condition:   models.ConditionCloudy,
 		Description: "stub: partly cloudy",
+		RawResponse: rawResponse,
 		ObservedAt:  time.Now().UTC(),
 		FetchedAt:   time.Now().UTC(),
 	}, nil

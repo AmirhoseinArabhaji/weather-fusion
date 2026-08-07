@@ -14,6 +14,9 @@ import (
 	"github.com/amirhosein/weather-fusion/internal/cache/redis"
 	"github.com/amirhosein/weather-fusion/internal/config"
 	"github.com/amirhosein/weather-fusion/internal/handlers"
+	"github.com/amirhosein/weather-fusion/internal/providers"
+	"github.com/amirhosein/weather-fusion/internal/providers/openweather"
+	"github.com/amirhosein/weather-fusion/internal/providers/weatherapi"
 	"github.com/amirhosein/weather-fusion/internal/repositories/postgres"
 	"github.com/amirhosein/weather-fusion/pkg/logger"
 )
@@ -50,8 +53,9 @@ func Run() {
 	defer cache.Close()
 	log.Info("redis connected")
 
-	// Setup HTTP router and routes
-	router := handlers.NewRouter(cfg, log)
+	// Build weather providers and wire the HTTP router
+	weatherProviders := buildProviders(cfg, log)
+	router := handlers.NewRouter(cfg, log, weatherProviders)
 
 	// Configure HTTP server
 	srv := &http.Server{
@@ -85,4 +89,12 @@ func Run() {
 		log.Error("server shutdown error", "error", err)
 	}
 	log.Info("server stopped gracefully")
+}
+
+// buildProviders constructs the list of weather providers from configuration.
+func buildProviders(cfg *config.Config, log *slog.Logger) []providers.WeatherProvider {
+	return []providers.WeatherProvider{
+		openweather.New(cfg.OpenWeatherAPIKey, cfg.OpenWeatherBaseURL, log),
+		weatherapi.New(cfg.WeatherAPIKey, cfg.WeatherAPIBaseURL, log),
+	}
 }

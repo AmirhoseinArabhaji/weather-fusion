@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"time"
 
 	"github.com/amirhosein/weather-fusion/internal/models"
 	"github.com/amirhosein/weather-fusion/internal/providers"
@@ -54,12 +55,25 @@ func (e *engine) Current(ctx context.Context, req models.WeatherRequest) (*model
 		return nil, &providerError{msg: "no providers returned data"}
 	}
 
+	return Merge(observations, len(e.providers)), nil
+}
+
+// Merge combines individually-fetched provider observations into a ConsensusResult.
+// totalProviders is the number of providers that were attempted (healthy + unhealthy),
+// used for the response-ratio part of the confidence score. Exported so callers that
+// fetch observations themselves (e.g. a streaming handler fanning out concurrently)
+// can reuse the same averaging/confidence logic instead of duplicating it.
+func Merge(observations []*models.WeatherObservation, totalProviders int) *models.ConsensusResult {
+	if len(observations) == 0 {
+		return nil
+	}
+
 	avgTemp, stdDev := temperatureStats(observations)
 	avgHumidity := averageHumidity(observations)
 	avgWind := averageWindSpeed(observations)
 	avgPrecip := averagePrecipProb(observations)
 	condition := majorityCondition(observations)
-	confidence := confidenceScore(len(observations), len(e.providers), stdDev)
+	confidence := confidenceScore(len(observations), totalProviders, stdDev)
 
 	return &models.ConsensusResult{
 		Location:    observations[0].Location,
@@ -71,7 +85,8 @@ func (e *engine) Current(ctx context.Context, req models.WeatherRequest) (*model
 		Condition:   condition,
 		Confidence:  confidence,
 		Providers:   dereferenceAll(observations),
-	}, nil
+		GeneratedAt: time.Now().UTC(),
+	}
 }
 
 func temperatureStats(obs []*models.WeatherObservation) (avg, stdDev float64) {
