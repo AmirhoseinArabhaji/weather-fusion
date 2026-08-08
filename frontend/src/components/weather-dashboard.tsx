@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useLocation } from '@/hooks/use-location';
 
 type ProviderName = 'OpenWeather' | 'Open-Meteo' | 'WeatherAPI' | 'Visual Crossing' | 'Met.no';
 type ProviderStatus = 'unavailable' | 'loading' | 'success' | 'failed';
@@ -219,10 +220,16 @@ function toggleButtonStyle(active: boolean, activeBg: string, activeColor: strin
 }
 
 export interface WeatherDashboardProps {
+  /** Overrides automatic location resolution (GPS -> IP -> saved). */
   city?: string;
 }
 
-export default function WeatherDashboard({ city = 'San Francisco, CA' }: WeatherDashboardProps) {
+export default function WeatherDashboard({ city: cityOverride }: WeatherDashboardProps) {
+  const { location } = useLocation();
+  // Numbers shown below are still mock data (backend forecast/LLM/accuracy
+  // endpoints aren't wired up yet) — only the location badge is real.
+  const city = cityOverride ?? (location?.city || (location ? 'Current location' : 'San Francisco, CA'));
+
   const [status, setStatus] = useState<Record<ProviderName, ProviderStatus>>(() =>
     Object.fromEntries(PROVIDER_NAMES.map((n) => [n, 'unavailable'])) as Record<ProviderName, ProviderStatus>,
   );
