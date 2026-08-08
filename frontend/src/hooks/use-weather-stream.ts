@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ConsensusResult, ProviderEvent } from '@/lib/weather-types';
+import type { ConsensusResult, ProviderEvent, SummaryEvent } from '@/lib/weather-types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
 
@@ -18,12 +18,17 @@ export interface WeatherStreamState {
   status: WeatherStreamStatus;
   providerEvents: ProviderEvent[];
   consensus: ConsensusResult | null;
+  summary: string | null;
+  summaryError: string | null;
   error: string | null;
 }
 
 /**
  * Consumes GET /api/v1/weather/current via SSE: a "provider" event per source
- * as it resolves, then one "consensus" event with the merged result.
+ * as it resolves, a "consensus" event with the merged numeric result, then a
+ * separate "summary" event once the LLM interpretation is ready (it runs
+ * after consensus is already flushed, so it lands a beat later — that's the
+ * connection's actual close signal, not "consensus").
  *
  * Pass null to hold off connecting (e.g. while location is still resolving).
  */
@@ -32,6 +37,8 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
     status: 'idle',
     providerEvents: [],
     consensus: null,
+    summary: null,
+    summaryError: null,
     error: null,
   });
 
@@ -55,7 +62,7 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
 
     // Connection just opened — clear out whatever the previous params' run left behind.
     source.addEventListener('open', () => {
-      setState({ status: 'connecting', providerEvents: [], consensus: null, error: null });
+      setState({ status: 'connecting', providerEvents: [], consensus: null, summary: null, summaryError: null, error: null });
     });
 
     source.addEventListener('provider', (event) => {
@@ -65,7 +72,13 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
 
     source.addEventListener('consensus', (event) => {
       const parsed = JSON.parse((event as MessageEvent).data) as ConsensusResult;
-      setState((s) => ({ ...s, status: 'done', consensus: parsed }));
+      // Not done yet — the summary event still has to arrive.
+      setState((s) => ({ ...s, consensus: parsed }));
+    });
+
+    source.addEventListener('summary', (event) => {
+      const parsed = JSON.parse((event as MessageEvent).data) as SummaryEvent;
+      setState((s) => ({ ...s, status: 'done', summary: parsed.summary ?? null, summaryError: parsed.error ?? null }));
       source.close();
     });
 

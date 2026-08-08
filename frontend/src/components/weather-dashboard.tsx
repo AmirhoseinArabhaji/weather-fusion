@@ -1,22 +1,12 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useLocation } from '@/hooks/use-location';
+import { useWeatherStream } from '@/hooks/use-weather-stream';
 
-type ProviderName = 'OpenWeather' | 'Open-Meteo' | 'WeatherAPI' | 'Visual Crossing' | 'Met.no';
-type ProviderStatus = 'unavailable' | 'loading' | 'success' | 'failed';
 type Units = 'C' | 'F';
 type Theme = 'light' | 'dark';
-
-interface ProviderReading {
-  name: ProviderName;
-  tempC: number;
-  feelsC: number;
-  rain: number;
-  wind: string;
-  condition: string;
-  humidity: number;
-}
+type ProviderStatus = 'unavailable' | 'loading' | 'success' | 'failed';
 
 interface HourReading {
   hourLabel: string;
@@ -35,41 +25,18 @@ interface DayReading {
 const SPACE_GROTESK = "var(--font-space-grotesk), 'Space Grotesk', sans-serif";
 const ACCENT = 'oklch(0.55 0.14 235)';
 
-const PROVIDER_NAMES: ProviderName[] = [
-  'OpenWeather',
-  'Open-Meteo',
-  'WeatherAPI',
-  'Visual Crossing',
-  'Met.no',
+// Assigned to real providers by arrival order — provider identity/count comes
+// from the backend now, not a fixed list, so colors can't be keyed by name.
+const PROVIDER_PALETTE = [
+  'oklch(0.55 0.14 235)',
+  'oklch(0.6 0.1 150)',
+  'oklch(0.68 0.12 70)',
+  'oklch(0.58 0.1 320)',
+  'oklch(0.58 0.11 20)',
 ];
 
-const PROVIDER_COLORS: Record<ProviderName, string> = {
-  OpenWeather: 'oklch(0.55 0.14 235)',
-  'Open-Meteo': 'oklch(0.6 0.1 150)',
-  WeatherAPI: 'oklch(0.68 0.12 70)',
-  'Visual Crossing': 'oklch(0.58 0.1 320)',
-  'Met.no': 'oklch(0.58 0.11 20)',
-};
-
-// Simulated final load outcome per provider - mirrors the design's mock
-// loading sequence. Swap for real SSE events from /api/v1/weather/current
-// when wiring this up to the backend.
-const FINAL_STATUSES: Record<ProviderName, ProviderStatus> = {
-  OpenWeather: 'success',
-  'Open-Meteo': 'success',
-  WeatherAPI: 'failed',
-  'Visual Crossing': 'success',
-  'Met.no': 'success',
-};
-
-const RAW_PROVIDERS: ProviderReading[] = [
-  { name: 'OpenWeather', tempC: 18, feelsC: 17, rain: 90, wind: '12 km/h SW', condition: 'Rain likely', humidity: 78 },
-  { name: 'Open-Meteo', tempC: 19, feelsC: 18, rain: 80, wind: '14 km/h SW', condition: 'Showers', humidity: 74 },
-  { name: 'WeatherAPI', tempC: 18, feelsC: 17, rain: 20, wind: '10 km/h W', condition: 'Partly cloudy', humidity: 65 },
-  { name: 'Visual Crossing', tempC: 17, feelsC: 16, rain: 75, wind: '15 km/h SW', condition: 'Light rain', humidity: 80 },
-  { name: 'Met.no', tempC: 18, feelsC: 17, rain: 60, wind: '11 km/h SW', condition: 'Cloudy', humidity: 72 },
-];
-
+// Demo data — the backend has no forecast or accuracy-tracking endpoint
+// wired up yet, so these stay illustrative until that exists.
 const HOURLY_DATA: HourReading[] = [
   { hourLabel: '12PM', lowC: 15, highC: 18, rain: 30 },
   { hourLabel: '1PM', lowC: 16, highC: 19, rain: 35 },
@@ -89,12 +56,9 @@ const DAILY_DATA: DayReading[] = [
   { dayLabel: 'Tue', lowC: 11, highC: 16, rain: 55 },
 ];
 
-const ACCURACY: { name: ProviderName; pct: number }[] = [
-  { name: 'OpenWeather', pct: 91 },
-  { name: 'Met.no', pct: 89 },
-  { name: 'Open-Meteo', pct: 88 },
-  { name: 'Visual Crossing', pct: 86 },
-  { name: 'WeatherAPI', pct: 84 },
+const ACCURACY: { name: string; pct: number }[] = [
+  { name: 'openweather', pct: 91 },
+  { name: 'weatherapi', pct: 84 },
 ];
 
 interface ThemeTokens {
@@ -226,26 +190,12 @@ export interface WeatherDashboardProps {
 
 export default function WeatherDashboard({ city: cityOverride }: WeatherDashboardProps) {
   const { location } = useLocation();
-  // Numbers shown below are still mock data (backend forecast/LLM/accuracy
-  // endpoints aren't wired up yet) — only the location badge is real.
   const city = cityOverride ?? (location?.city || (location ? 'Current location' : 'San Francisco, CA'));
 
-  const [status, setStatus] = useState<Record<ProviderName, ProviderStatus>>(() =>
-    Object.fromEntries(PROVIDER_NAMES.map((n) => [n, 'unavailable'])) as Record<ProviderName, ProviderStatus>,
-  );
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
 
-  useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    PROVIDER_NAMES.forEach((name, i) => {
-      const startDelay = 200 + i * 260;
-      const finishDelay = startDelay + 900 + i * 180;
-      timers.push(setTimeout(() => setStatus((s) => ({ ...s, [name]: 'loading' })), startDelay));
-      timers.push(setTimeout(() => setStatus((s) => ({ ...s, [name]: FINAL_STATUSES[name] })), finishDelay));
-    });
-    return () => timers.forEach(clearTimeout);
-  }, []);
+  const stream = useWeatherStream(location ? { lat: location.lat, lon: location.lon, units: 'metric' } : null);
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
@@ -255,27 +205,37 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
 
   const display = (c: number) => (units === 'F' ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c)}°C`);
 
-  const providerStatuses = PROVIDER_NAMES.map((name) => ({
-    name,
-    ...statusMeta(status[name], dark, t.text3),
-  }));
-  const allLoaded = Object.values(status).every((s) => s === 'success' || s === 'failed');
-  const gatheringLabel = allLoaded ? 'Data gathered' : 'Gathering data…';
+  // Real providers, in arrival order — count and identity come from whatever
+  // the backend actually has configured, not a fixed list.
+  const providers = stream.providerEvents
+    .filter((ev) => ev.status === 'ok' && ev.data)
+    .map((ev, i) => {
+      const data = ev.data!;
+      return {
+        name: ev.provider,
+        color: PROVIDER_PALETTE[i % PROVIDER_PALETTE.length],
+        tempC: data.temperature,
+        feelsC: data.feels_like,
+        condition: data.description || data.condition,
+        rainPct: Math.round(data.precip_prob * 100),
+        tempDisplay: display(data.temperature),
+      };
+    });
 
-  const temps = RAW_PROVIDERS.map((p) => p.tempC);
-  const rains = RAW_PROVIDERS.map((p) => p.rain);
-  const tempMean = mean(temps);
-  const tempStd = stddev(temps);
-  const rainStd = stddev(rains);
+  const providerStatuses = stream.providerEvents.map((ev) => ({
+    name: ev.provider,
+    ...statusMeta(ev.status === 'ok' ? 'success' : 'failed', dark, t.text3),
+  }));
+  const gatheringLabel =
+    stream.status === 'done' ? 'Data gathered' : stream.status === 'error' ? 'Error loading data' : 'Gathering data…';
+
+  const temps = providers.map((p) => p.tempC);
+  const rains = providers.map((p) => p.rainPct);
+  const tempStd = temps.length > 0 ? stddev(temps) : 0;
+  const rainStd = rains.length > 0 ? stddev(rains) : 0;
 
   const tempConfidence = confidenceFor(tempStd, 0.8, 1.5, dark);
   const rainConfidence = confidenceFor(rainStd, 12, 22, dark);
-
-  const providers = RAW_PROVIDERS.map((p) => ({
-    ...p,
-    color: PROVIDER_COLORS[p.name],
-    tempDisplay: display(p.tempC),
-  }));
 
   const globalHigh = Math.max(...HOURLY_DATA.map((h) => h.highC));
   const globalLow = Math.min(...HOURLY_DATA.map((h) => h.lowC));
@@ -297,14 +257,23 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
     rainColor: rainColorFor(d.rain, dark),
   }));
 
-  const consensusTempDisplay = display(tempMean);
-  const consensusFeelsDisplay = display(mean(RAW_PROVIDERS.map((p) => p.feelsC)));
-  const tempSpread = (Math.max(...temps) - Math.min(...temps)).toFixed(1);
-  const rainRangeLabel = `${Math.min(...rains)}–${Math.max(...rains)}%`;
+  const consensusTempDisplay = stream.consensus ? display(stream.consensus.temperature) : '—';
+  const consensusFeelsDisplay = providers.length > 0 ? display(mean(providers.map((p) => p.feelsC))) : '—';
+  const tempSpread = temps.length > 0 ? (Math.max(...temps) - Math.min(...temps)).toFixed(1) : '0.0';
+  const rainRangeLabel = rains.length > 0 ? `${Math.min(...rains)}–${Math.max(...rains)}%` : '—';
   const rainDisagreementNote =
-    rainConfidence.label === 'Low' ? 'Wide disagreement on rain - treat as uncertain' : 'Providers broadly agree on rain chance';
-  // Mock - replace with the real LLM summary once /api/v1/weather/current wires in a summarizer.
-  const llmSummary = `Four of five providers put today near ${consensusTempDisplay} with high agreement on temperature. Rain is the sticking point: most call for rain arriving mid-afternoon, but WeatherAPI expects it to stay largely dry - confidence on precipitation is low. Plan for a dry morning and keep a rain shell on hand after 2 PM.`;
+    rainConfidence.label === 'Low' ? 'Wide disagreement on rain — treat as uncertain' : 'Providers broadly agree on rain chance';
+
+  const llmSummary =
+    stream.status === 'error'
+      ? (stream.error ?? 'Unable to load weather data.')
+      : stream.summary
+        ? stream.summary
+        : stream.summaryError
+          ? 'AI interpretation unavailable for this reading.'
+          : stream.consensus
+            ? 'Generating AI interpretation…'
+            : 'Gathering provider data…';
 
   return (
     <div
@@ -374,7 +343,6 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT }} />
             {city}
           </div>
-          <div style={{ fontSize: 13, color: t.text3 }}>Friday, August 7</div>
           <div style={{ display: 'flex', background: t.trackBg, borderRadius: 9, padding: 3, gap: 2 }}>
             <button onClick={() => setUnits('C')} style={toggleButtonStyle(units === 'C', activeBg, activeColor, inactiveColor)}>
               °C
@@ -440,7 +408,7 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
             {consensusTempDisplay}
           </div>
           <div style={{ fontSize: 16, color: t.text3, marginTop: 10 }}>
-            Feels like {consensusFeelsDisplay} · {providers.length} providers averaged
+            Feels like {consensusFeelsDisplay} · {providers.length} provider{providers.length === 1 ? '' : 's'} averaged
           </div>
           <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
             <div style={{ flex: 1, background: tempConfidence.soft, borderRadius: 12, padding: '14px 16px' }}>
@@ -480,19 +448,19 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
           </div>
           <div style={{ fontSize: 19, lineHeight: 1.6, color: t.text2, flex: 1 }}>{llmSummary}</div>
           <div style={{ fontSize: 12, color: t.text3, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${t.borderSoft}` }}>
-            Generated from provider consensus data - not an independent forecast.
+            Generated from provider consensus data — not an independent forecast.
           </div>
         </div>
       </div>
 
-      {/* Rain + hourly/daily outlook */}
+      {/* Rain + hourly/daily outlook — demo data, no forecast endpoint wired up yet */}
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 18, padding: '28px 32px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 18, fontWeight: 600 }}>Rain & hourly outlook</div>
+          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 18, fontWeight: 600 }}>Rain & hourly outlook (demo)</div>
           <div style={{ fontSize: 12, color: rainConfidence.strong }}>{rainDisagreementNote}</div>
         </div>
         <div style={{ fontSize: 12, color: t.text3, marginBottom: 20 }}>
-          Bars show temperature range across providers; color marks rain chance for that hour
+          Illustrative — forecast API is not connected yet, values below are not real
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220, padding: '0 4px', marginBottom: 24 }}>
           {hourly.map((h) => (
@@ -523,7 +491,7 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         </div>
         <div style={{ borderTop: `1px solid ${t.borderSoft}`, paddingTop: 20 }}>
           <div style={{ fontSize: 13, color: t.text3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
-            5-day outlook
+            5-day outlook (demo)
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
             {daily.map((d) => (
@@ -538,27 +506,29 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         </div>
       </div>
 
-      {/* Rain probability by provider */}
+      {/* Rain probability by provider — real, from precip_prob (currently 0
+          for both providers: neither's FetchCurrent populates real rain
+          chance, that's a forecast-only field) */}
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 16, padding: '22px 26px', marginBottom: 20 }}>
         <div style={{ fontFamily: SPACE_GROTESK, fontSize: 15, fontWeight: 600, marginBottom: 14 }}>
-          Rain probability - by provider
+          Rain probability — by provider
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(providers.length, 1)}, 1fr)`, gap: 20 }}>
           {providers.map((p) => (
             <div key={p.name}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
                 <span style={{ color: t.text3 }}>{p.name}</span>
-                <span style={{ fontWeight: 700 }}>{p.rain}%</span>
+                <span style={{ fontWeight: 700 }}>{p.rainPct}%</span>
               </div>
               <div style={{ height: 7, background: t.trackBg, borderRadius: 5, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: p.color, borderRadius: 5, width: `${p.rain}%` }} />
+                <div style={{ height: '100%', background: p.color, borderRadius: 5, width: `${p.rainPct}%` }} />
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Provider comparison (condensed) + Historical accuracy */}
+      {/* Provider comparison (real) + Historical accuracy (demo — no persistence yet) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.8fr', gap: 18 }}>
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: t.text3, marginBottom: 10 }}>Provider comparison</div>
@@ -579,14 +549,14 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
                 {p.name}
               </div>
               <div style={{ color: t.text3 }}>
-                {p.tempDisplay} · {p.rain}% · {p.condition}
+                {p.tempDisplay} · {p.rainPct}% · {p.condition}
               </div>
             </div>
           ))}
         </div>
 
         <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: t.text3, marginBottom: 10 }}>Track record (30d)</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: t.text3, marginBottom: 10 }}>Track record (30d, demo)</div>
           {ACCURACY.map((a) => (
             <div
               key={a.name}

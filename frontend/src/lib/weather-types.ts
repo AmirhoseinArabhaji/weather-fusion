@@ -41,7 +41,6 @@ export interface ConsensusResult {
   condition: WeatherCondition;
   confidence: number;
   providers: WeatherObservation[];
-  summary: string;
   generated_at: string;
 }
 
@@ -49,5 +48,12 @@ export interface ProviderEvent {
   provider: string;
   status: 'ok' | 'error';
   data?: WeatherObservation;
+  error?: string;
+}
+
+// Sent separately from "consensus" — the LLM call runs after the numeric
+// data is already flushed, so this arrives a beat later (or with `error`).
+export interface SummaryEvent {
+  summary?: string;
   error?: string;
 }
