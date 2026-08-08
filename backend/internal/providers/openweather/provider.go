@@ -181,28 +181,169 @@ func mapCondition(main string) models.WeatherCondition {
 	}
 }
 
+// maxForecastPoints is the free 5 Day / 3 Hour Forecast API's hard cap:
+// 5 days at 3-hour resolution (8 points/day).
+const maxForecastPoints = 40
+
+// forecastListResponse mirrors data/2.5/forecast's response shape.
+type forecastListResponse struct {
+	List []forecastEntry `json:"list"`
+	City struct {
+		Name string `json:"name"`
+	} `json:"city"`
+}
+
+type forecastEntry struct {
+	Dt      int64               `json:"dt"`
+	Weather []weatherDescriptor `json:"weather"`
+	Main    struct {
+		Temp     float64 `json:"temp"`
+		Humidity int     `json:"humidity"`
+	} `json:"main"`
+	Wind struct {
+		Speed float64 `json:"speed"`
+	} `json:"wind"`
+	Pop float64 `json:"pop"`
+}
+
+// FetchForecast retrieves a 3-hour-interval forecast (up to 5 days / 40
+// points) and buckets it into one DailyForecast per calendar date. req.Days
+// beyond 5 is silently capped — the underlying API doesn't offer more.
+//
+// data/2.5/forecast/daily (native daily, up to 16 days) would be a better
+// fit for this model but 401s on the current API key's plan; this endpoint
+// is the one that actually works, so it's what's wired in.
 func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error) {
-	// TODO: call GET {baseURL}/forecast?q={city}&appid={apiKey}&units=metric
-	p.log.DebugContext(ctx, "fetch forecast (stub)", "city", req.City)
 	days := req.Days
 	if days == 0 {
-		days = 7
+		days = 5
 	}
-	forecast := &models.ProviderForecast{
-		Location:  models.Location{City: req.City},
-		Provider:  providerName,
-		FetchedAt: time.Now().UTC(),
+	cnt := min(days*8, maxForecastPoints)
+
+	raw, err := p.get(ctx, p.buildForecastURL(req, cnt))
+	if err != nil {
+		return nil, fmt.Errorf("openweather: fetch forecast: %w", err)
 	}
-	for i := 0; i < days; i++ {
-		forecast.Days = append(forecast.Days, models.DailyForecast{
-			Date:        time.Now().UTC().AddDate(0, 0, i),
-			TempMin:     15.0,
-			TempMax:     25.0,
-			Condition:   models.ConditionClear,
-			Description: fmt.Sprintf("stub day %d", i+1),
+
+	var parsed forecastListResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("openweather: decode forecast response: %w", err)
+	}
+
+	return &models.ProviderForecast{
+		Location:    models.Location{City: parsed.City.Name},
+		Provider:    providerName,
+		Days:        groupIntoDailyForecast(parsed.List),
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}, nil
+}
+
+// buildForecastURL prefers city name (native to this endpoint); falls back to lat/lon.
+func (p *Provider) buildForecastURL(req models.WeatherRequest, cnt int) string {
+	units := req.Units
+	if units == "" {
+		units = "metric"
+	}
+
+	params := url.Values{}
+	params.Set("appid", p.apiKey)
+	params.Set("units", units)
+	params.Set("cnt", fmt.Sprintf("%d", cnt))
+	if req.City != "" {
+		params.Set("q", req.City)
+	} else {
+		params.Set("lat", fmt.Sprintf("%f", req.Lat))
+		params.Set("lon", fmt.Sprintf("%f", req.Lon))
+	}
+	return fmt.Sprintf("%s/forecast?%s", p.baseURL, params.Encode())
+}
+
+// groupIntoDailyForecast buckets 3-hourly entries by UTC calendar date:
+// min/max temp across the day, average humidity/wind, the day's highest rain
+// chance, and the most frequently reported condition.
+func groupIntoDailyForecast(entries []forecastEntry) []models.DailyForecast {
+	type bucket struct {
+		date        time.Time
+		tempMin     float64
+		tempMax     float64
+		humiditySum int
+		windSum     float64
+		popMax      float64
+		count       int
+		conditions  map[string]int
+		descByCond  map[string]string
+	}
+
+	buckets := make(map[string]*bucket)
+	var order []string
+
+	for _, e := range entries {
+		t := time.Unix(e.Dt, 0).UTC()
+		key := t.Format("2006-01-02")
+		b, ok := buckets[key]
+		if !ok {
+			b = &bucket{
+				date:       t.Truncate(24 * time.Hour),
+				tempMin:    e.Main.Temp,
+				tempMax:    e.Main.Temp,
+				conditions: map[string]int{},
+				descByCond: map[string]string{},
+			}
+			buckets[key] = b
+			order = append(order, key)
+		}
+		if e.Main.Temp < b.tempMin {
+			b.tempMin = e.Main.Temp
+		}
+		if e.Main.Temp > b.tempMax {
+			b.tempMax = e.Main.Temp
+		}
+		b.humiditySum += e.Main.Humidity
+		b.windSum += e.Wind.Speed
+		if e.Pop > b.popMax {
+			b.popMax = e.Pop
+		}
+		if len(e.Weather) > 0 {
+			main := e.Weather[0].Main
+			b.conditions[main]++
+			if _, seen := b.descByCond[main]; !seen {
+				b.descByCond[main] = e.Weather[0].Description
+			}
+		}
+		b.count++
+	}
+
+	days := make([]models.DailyForecast, 0, len(order))
+	for _, key := range order {
+		b := buckets[key]
+
+		majorCondition, majorCount := "", 0
+		for cond, count := range b.conditions {
+			if count > majorCount {
+				majorCondition, majorCount = cond, count
+			}
+		}
+
+		var avgHumidity int
+		var avgWind float64
+		if b.count > 0 {
+			avgHumidity = b.humiditySum / b.count
+			avgWind = b.windSum / float64(b.count)
+		}
+
+		days = append(days, models.DailyForecast{
+			Date:        b.date,
+			TempMin:     b.tempMin,
+			TempMax:     b.tempMax,
+			Humidity:    avgHumidity,
+			WindSpeed:   avgWind,
+			PrecipProb:  b.popMax,
+			Condition:   mapCondition(majorCondition),
+			Description: b.descByCond[majorCondition],
 		})
 	}
-	return forecast, nil
+	return days
 }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {
