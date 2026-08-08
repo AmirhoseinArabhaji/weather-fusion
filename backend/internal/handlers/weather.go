@@ -41,7 +41,8 @@ type providerEvent struct {
 //
 //	@Summary     Stream current weather
 //	@Description Fans out to all providers concurrently and streams each result as it
-//	@Description arrives via SSE, followed by a final merged consensus event.
+//	@Description arrives via SSE, followed by a merged consensus event, then a
+//	@Description separate summary event once the LLM interpretation is ready.
 //	@Tags        weather
 //	@Produce     text/event-stream
 //	@Param       city query string false "City name"
@@ -109,7 +110,13 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	}
 
 	result := consensus.Merge(observations, len(h.providers))
+	c.SSEvent("consensus", result)
+	c.Writer.Flush()
 
+	// Sent separately from "consensus" so the numeric data isn't held up
+	// waiting on the LLM call. Always fires exactly once (summary, error, or
+	// "unavailable") so the client has a reliable signal to stop listening.
+	summaryPayload := gin.H{}
 	if h.llm != nil && h.llm.IsAvailable(ctx) {
 		summary, err := h.llm.Summarize(ctx, llm.SummarizeRequest{
 			City:        result.Location.City,
@@ -119,11 +126,13 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 		})
 		if err != nil {
 			h.log.WarnContext(ctx, "llm summarize failed", "error", err)
+			summaryPayload["error"] = err.Error()
 		} else {
-			result.Summary = summary.Content
+			summaryPayload["summary"] = summary.Content
 		}
+	} else {
+		summaryPayload["error"] = "llm unavailable"
 	}
-
-	c.SSEvent("consensus", result)
+	c.SSEvent("summary", summaryPayload)
 	c.Writer.Flush()
 }

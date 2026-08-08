@@ -78,7 +78,7 @@ func Load() (*Config, error) {
 		WeatherAPIBaseURL:  getEnv("WEATHERAPI_BASE_URL", "https://api.weatherapi.com/v1"),
 
 		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
-		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-flash-latest"),
 		GeminiMaxTokens: getEnvInt("GEMINI_MAX_TOKENS", 512),
 
 		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),

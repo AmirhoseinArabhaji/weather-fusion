@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultModel = "gemini-2.0-flash"
+	defaultModel = "gemini-flash-latest"
 	baseURL      = "https://generativelanguage.googleapis.com/v1beta"
 )
 

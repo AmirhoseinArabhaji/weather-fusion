@@ -86,7 +86,6 @@ type ConsensusResult struct {
 	Condition     WeatherCondition   `json:"condition"`      // majority vote
 	Confidence    float64            `json:"confidence"`     // 0–1 based on agreement
 	Providers     []WeatherObservation `json:"providers"`    // individual readings
-	Summary       string             `json:"summary"`        // LLM-generated explanation
 	GeneratedAt   time.Time          `json:"generated_at"`
 }
 
