@@ -14,6 +14,7 @@ import (
 	"github.com/amirhosein/weather-fusion/internal/cache/redis"
 	"github.com/amirhosein/weather-fusion/internal/config"
 	"github.com/amirhosein/weather-fusion/internal/handlers"
+	"github.com/amirhosein/weather-fusion/internal/llm/gemini"
 	"github.com/amirhosein/weather-fusion/internal/providers"
 	"github.com/amirhosein/weather-fusion/internal/providers/openweather"
 	"github.com/amirhosein/weather-fusion/internal/providers/weatherapi"
@@ -53,9 +54,10 @@ func Run() {
 	defer cache.Close()
 	log.Info("redis connected")
 
-	// Build weather providers and wire the HTTP router
+	// Build weather providers, LLM client, and wire the HTTP router
 	weatherProviders := buildProviders(cfg, log)
-	router := handlers.NewRouter(cfg, log, weatherProviders)
+	llmClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiMaxTokens, log)
+	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient)
 
 	// Configure HTTP server
 	srv := &http.Server{

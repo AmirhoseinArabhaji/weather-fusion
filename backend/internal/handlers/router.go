@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/amirhosein/weather-fusion/internal/config"
+	"github.com/amirhosein/weather-fusion/internal/llm"
 	"github.com/amirhosein/weather-fusion/internal/middleware"
 	"github.com/amirhosein/weather-fusion/internal/providers"
 )
@@ -15,6 +16,7 @@ func NewRouter(
 	cfg *config.Config,
 	log *slog.Logger,
 	weatherProviders []providers.WeatherProvider,
+	llmService llm.LLMService,
 ) *gin.Engine {
 	if cfg.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
@@ -29,7 +31,7 @@ func NewRouter(
 	healthHandler := NewHealthHandler(cfg.AppVersion)
 	r.GET("/health", healthHandler.Check)
 
-	weatherHandler := NewWeatherHandler(weatherProviders, log)
+	weatherHandler := NewWeatherHandler(weatherProviders, llmService, log)
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/weather/current", weatherHandler.Current)

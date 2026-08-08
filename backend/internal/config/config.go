@@ -37,9 +37,9 @@ type Config struct {
 	WeatherAPIKey      string
 	WeatherAPIBaseURL  string
 
-	OpenAIAPIKey    string
-	OpenAIModel     string
-	OpenAIMaxTokens int
+	GeminiAPIKey    string
+	GeminiModel     string
+	GeminiMaxTokens int
 
 	CORSAllowedOrigins string
 
@@ -77,9 +77,9 @@ func Load() (*Config, error) {
 		WeatherAPIKey:      getEnv("WEATHERAPI_KEY", ""),
 		WeatherAPIBaseURL:  getEnv("WEATHERAPI_BASE_URL", "https://api.weatherapi.com/v1"),
 
-		OpenAIAPIKey:    getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:     getEnv("OPENAI_MODEL", "gpt-4o"),
-		OpenAIMaxTokens: getEnvInt("OPENAI_MAX_TOKENS", 512),
+		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
+		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-2.0-flash"),
+		GeminiMaxTokens: getEnvInt("GEMINI_MAX_TOKENS", 512),
 
 		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 

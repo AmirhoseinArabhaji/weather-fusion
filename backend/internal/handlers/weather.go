@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/amirhosein/weather-fusion/internal/consensus"
+	"github.com/amirhosein/weather-fusion/internal/llm"
 	"github.com/amirhosein/weather-fusion/internal/middleware"
 	"github.com/amirhosein/weather-fusion/internal/models"
 	"github.com/amirhosein/weather-fusion/internal/providers"
@@ -18,12 +20,13 @@ import (
 // WeatherHandler streams weather data fanned out across all configured providers.
 type WeatherHandler struct {
 	providers []providers.WeatherProvider
+	llm       llm.LLMService
 	log       *slog.Logger
 }
 
 // NewWeatherHandler creates a WeatherHandler.
-func NewWeatherHandler(provs []providers.WeatherProvider, log *slog.Logger) *WeatherHandler {
-	return &WeatherHandler{providers: provs, log: log.With("handler", "weather")}
+func NewWeatherHandler(provs []providers.WeatherProvider, llmService llm.LLMService, log *slog.Logger) *WeatherHandler {
+	return &WeatherHandler{providers: provs, llm: llmService, log: log.With("handler", "weather")}
 }
 
 // providerEvent is the payload sent for each "provider" SSE event.
@@ -106,6 +109,21 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	}
 
 	result := consensus.Merge(observations, len(h.providers))
+
+	if h.llm != nil && h.llm.IsAvailable(ctx) {
+		summary, err := h.llm.Summarize(ctx, llm.SummarizeRequest{
+			City:        result.Location.City,
+			Temperature: result.Temperature,
+			Condition:   string(result.Condition),
+			Description: fmt.Sprintf("%.0f%% confidence, ±%.1f° spread across %d providers", result.Confidence*100, result.TempStdDev, len(result.Providers)),
+		})
+		if err != nil {
+			h.log.WarnContext(ctx, "llm summarize failed", "error", err)
+		} else {
+			result.Summary = summary.Content
+		}
+	}
+
 	c.SSEvent("consensus", result)
 	c.Writer.Flush()
 }
