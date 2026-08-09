@@ -76,7 +76,7 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	confidence := confidenceScore(len(observations), totalProviders, stdDev)
 
 	return &models.ConsensusResult{
-		Location:    observations[0].Location,
+		Location:    bestLocation(observations),
 		Temperature: avgTemp,
 		TempStdDev:  stdDev,
 		Humidity:    avgHumidity,
@@ -87,6 +87,20 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 		Providers:   dereferenceAll(observations),
 		GeneratedAt: time.Now().UTC(),
 	}
+}
+
+// bestLocation prefers the first observation with a non-empty city name.
+// Providers race concurrently, so observations[0] isn't a fixed provider —
+// and not all of them reverse-geocode lat/lon input (e.g. Visual Crossing
+// doesn't), so blindly taking observations[0].Location risked an empty city
+// whenever an unnamed one happened to land first.
+func bestLocation(obs []*models.WeatherObservation) models.Location {
+	for _, o := range obs {
+		if o.Location.City != "" {
+			return o.Location
+		}
+	}
+	return obs[0].Location
 }
 
 func temperatureStats(obs []*models.WeatherObservation) (avg, stdDev float64) {

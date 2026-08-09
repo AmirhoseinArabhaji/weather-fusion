@@ -32,10 +32,15 @@ type Config struct {
 	RedisDB       int
 	CacheTTL      time.Duration
 
-	OpenWeatherAPIKey  string
-	OpenWeatherBaseURL string
-	WeatherAPIKey      string
-	WeatherAPIBaseURL  string
+	OpenWeatherAPIKey     string
+	OpenWeatherBaseURL    string
+	WeatherAPIKey         string
+	WeatherAPIBaseURL     string
+	OpenMeteoBaseURL      string
+	VisualCrossingAPIKey  string
+	VisualCrossingBaseURL string
+	TomorrowIOAPIKey      string
+	TomorrowIOBaseURL     string
 
 	GeminiAPIKey    string
 	GeminiModel     string
@@ -76,6 +81,13 @@ func Load() (*Config, error) {
 		OpenWeatherBaseURL: getEnv("OPENWEATHER_BASE_URL", "https://api.openweathermap.org/data/2.5"),
 		WeatherAPIKey:      getEnv("WEATHERAPI_KEY", ""),
 		WeatherAPIBaseURL:  getEnv("WEATHERAPI_BASE_URL", "https://api.weatherapi.com/v1"),
+		OpenMeteoBaseURL:   getEnv("OPENMETEO_BASE_URL", "https://api.open-meteo.com/v1"),
+
+		VisualCrossingAPIKey:  getEnv("VISUALCROSSING_API_KEY", ""),
+		VisualCrossingBaseURL: getEnv("VISUALCROSSING_BASE_URL", "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"),
+
+		TomorrowIOAPIKey:  getEnv("TOMORROWIO_API_KEY", ""),
+		TomorrowIOBaseURL: getEnv("TOMORROWIO_BASE_URL", "https://api.tomorrow.io/v4"),
 
 		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-flash-latest"),

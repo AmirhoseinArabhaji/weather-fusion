@@ -16,7 +16,10 @@ import (
 	"github.com/amirhosein/weather-fusion/internal/handlers"
 	"github.com/amirhosein/weather-fusion/internal/llm/gemini"
 	"github.com/amirhosein/weather-fusion/internal/providers"
+	"github.com/amirhosein/weather-fusion/internal/providers/openmeteo"
 	"github.com/amirhosein/weather-fusion/internal/providers/openweather"
+	"github.com/amirhosein/weather-fusion/internal/providers/tomorrowio"
+	"github.com/amirhosein/weather-fusion/internal/providers/visualcrossing"
 	"github.com/amirhosein/weather-fusion/internal/providers/weatherapi"
 	"github.com/amirhosein/weather-fusion/internal/repositories/postgres"
 	"github.com/amirhosein/weather-fusion/pkg/logger"
@@ -98,5 +101,8 @@ func buildProviders(cfg *config.Config, log *slog.Logger) []providers.WeatherPro
 	return []providers.WeatherProvider{
 		openweather.New(cfg.OpenWeatherAPIKey, cfg.OpenWeatherBaseURL, log),
 		weatherapi.New(cfg.WeatherAPIKey, cfg.WeatherAPIBaseURL, log),
+		openmeteo.New("", cfg.OpenMeteoBaseURL, log),
+		visualcrossing.New(cfg.VisualCrossingAPIKey, cfg.VisualCrossingBaseURL, log),
+		tomorrowio.New(cfg.TomorrowIOAPIKey, cfg.TomorrowIOBaseURL, log),
 	}
 }
