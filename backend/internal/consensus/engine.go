@@ -3,60 +3,11 @@
 package consensus
 
 import (
-	"context"
-	"log/slog"
 	"math"
 	"time"
 
 	"github.com/amirhosein/weather-fusion/internal/models"
-	"github.com/amirhosein/weather-fusion/internal/providers"
 )
-
-// Engine combines data from multiple providers.
-type Engine interface {
-	// Current fetches from all healthy providers and returns a merged ConsensusResult.
-	Current(ctx context.Context, req models.WeatherRequest) (*models.ConsensusResult, error)
-}
-
-// engine is the default implementation.
-type engine struct {
-	providers []providers.WeatherProvider
-	log       *slog.Logger
-}
-
-// NewEngine creates a new consensus Engine with the given providers.
-func NewEngine(provs []providers.WeatherProvider, log *slog.Logger) Engine {
-	return &engine{
-		providers: provs,
-		log:       log.With("component", "consensus"),
-	}
-}
-
-// Current collects current weather from all providers, averages numeric fields,
-// picks the most common condition, and calculates a confidence score based on
-// how much providers agree on temperature.
-func (e *engine) Current(ctx context.Context, req models.WeatherRequest) (*models.ConsensusResult, error) {
-	var observations []*models.WeatherObservation
-
-	for _, p := range e.providers {
-		if !p.IsHealthy(ctx) {
-			e.log.WarnContext(ctx, "provider unhealthy, skipping", "provider", p.Name())
-			continue
-		}
-		obs, err := p.FetchCurrent(ctx, req)
-		if err != nil {
-			e.log.ErrorContext(ctx, "provider fetch error", "provider", p.Name(), "error", err)
-			continue
-		}
-		observations = append(observations, obs)
-	}
-
-	if len(observations) == 0 {
-		return nil, &providerError{msg: "no providers returned data"}
-	}
-
-	return Merge(observations, len(e.providers)), nil
-}
 
 // Merge combines individually-fetched provider observations into a ConsensusResult.
 // totalProviders is the number of providers that were attempted (healthy + unhealthy),
@@ -177,8 +128,3 @@ func dereferenceAll(obs []*models.WeatherObservation) []models.WeatherObservatio
 	}
 	return out
 }
-
-// providerError is a local error type for consensus failures.
-type providerError struct{ msg string }
-
-func (e *providerError) Error() string { return e.msg }

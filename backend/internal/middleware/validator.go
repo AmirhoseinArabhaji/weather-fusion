@@ -13,18 +13,6 @@ import (
 // validate is a shared validator instance (thread-safe).
 var validate = validator.New()
 
-// BindAndValidate binds a JSON request body into dst and returns validation errors
-// as a structured 400 response. Returns false if the handler should abort.
-func BindAndValidate(c *gin.Context, dst interface{}) bool {
-	if err := c.ShouldBindJSON(dst); err != nil {
-		details := formatValidationErrors(err)
-		response.ErrorWithDetails(c, http.StatusBadRequest, "VALIDATION_ERROR", "request validation failed", details)
-		c.Abort()
-		return false
-	}
-	return true
-}
-
 // BindQueryAndValidate binds query parameters into dst and returns validation errors.
 func BindQueryAndValidate(c *gin.Context, dst interface{}) bool {
 	if err := c.ShouldBindQuery(dst); err != nil {
