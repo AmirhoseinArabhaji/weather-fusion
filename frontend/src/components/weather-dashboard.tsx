@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
@@ -164,14 +164,33 @@ export interface WeatherDashboardProps {
 }
 
 export default function WeatherDashboard({ city: cityOverride }: WeatherDashboardProps) {
-  const { location } = useLocation();
-  const city = cityOverride ?? (location?.city || (location ? 'Current location' : 'San Francisco, CA'));
+  const { location, loading: locationLoading, error: locationError, setManualLocation } = useLocation();
 
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
+  const [manualInput, setManualInput] = useState('');
 
-  const stream = useWeatherStream(location ? { lat: location.lat, lon: location.lon, units: 'metric' } : null);
-  const forecast = useForecastStream(location ? { lat: location.lat, lon: location.lon, units: 'metric', days: 5 } : null);
+  const handleLocationSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = manualInput.trim();
+    if (!trimmed) return;
+    setManualLocation(trimmed);
+    setManualInput('');
+  };
+
+  // Manually-entered locations have no coordinates (no client-side geocoding) —
+  // send the city name instead and let the backend resolve it, same as every
+  // other city-name query.
+  const locationParams = cityOverride
+    ? { city: cityOverride, units: 'metric' as const }
+    : location
+      ? location.lat != null && location.lon != null
+        ? { lat: location.lat, lon: location.lon, units: 'metric' as const }
+        : { city: location.city, units: 'metric' as const }
+      : null;
+
+  const stream = useWeatherStream(locationParams);
+  const forecast = useForecastStream(locationParams ? { ...locationParams, days: 5 } : null);
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
@@ -332,22 +351,70 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: t.card,
-              border: `1px solid ${t.border}`,
-              borderRadius: 10,
-              padding: '9px 14px',
-              fontSize: 14,
-              color: t.text2,
-            }}
-          >
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT }} />
-            {city}
-          </div>
+          {cityOverride ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: t.card,
+                border: `1px solid ${t.border}`,
+                borderRadius: 10,
+                padding: '9px 14px',
+                fontSize: 14,
+                color: t.text2,
+              }}
+            >
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT }} />
+              {cityOverride}
+            </div>
+          ) : (
+            // Always editable — GPS/IP resolution runs in the background (see
+            // useLocation) and fills this in once it lands, but typing here
+            // and hitting Set overrides it immediately, whether that
+            // resolution is still pending, still running, or already failed.
+            <form
+              onSubmit={handleLocationSubmit}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: t.card,
+                border: `1px solid ${locationError ? 'oklch(0.55 0.16 25)' : t.border}`,
+                borderRadius: 10,
+                padding: '6px 8px 6px 14px',
+              }}
+            >
+              <div
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: locationError ? 'oklch(0.55 0.16 25)' : ACCENT,
+                  animation: locationLoading ? 'pulseDot 1s ease-in-out infinite' : 'none',
+                  flexShrink: 0,
+                }}
+              />
+              <input
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                placeholder={
+                  locationError
+                    ? 'Location lookup failed — enter a city'
+                    : location
+                      ? location.city || 'Current location — or enter a city'
+                      : 'Resolving location… or enter a city'
+                }
+                style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: t.text, width: 220 }}
+              />
+              <button
+                type="submit"
+                style={{ border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, padding: '6px 10px', borderRadius: 7, background: ACCENT, color: 'white' }}
+              >
+                Set
+              </button>
+            </form>
+          )}
           <div style={{ display: 'flex', background: t.trackBg, borderRadius: 9, padding: 3, gap: 2 }}>
             <button onClick={() => setUnits('C')} style={toggleButtonStyle(units === 'C', activeBg, activeColor, inactiveColor)}>
               °C

@@ -6,8 +6,10 @@ export type LocationSource = 'saved' | 'gps' | 'ip' | 'manual';
 
 export interface ResolvedLocation {
   city: string;
-  lat: number;
-  lon: number;
+  // null for a manually-typed city — there's no client-side geocoding, so no
+  // coordinates exist until the backend resolves the name itself.
+  lat: number | null;
+  lon: number | null;
   source: LocationSource;
 }
 
@@ -15,7 +17,7 @@ export interface LocationState {
   location: ResolvedLocation | null;
   loading: boolean;
   error: string | null;
-  setManualLocation: (loc: { city: string; lat: number; lon: number }) => void;
+  setManualLocation: (city: string) => void;
 }
 
 const STORAGE_KEY = 'weather-fusion:location';
@@ -47,17 +49,34 @@ function save(loc: ResolvedLocation) {
  * geocoded city for whatever lat/lon it was given).
  */
 export function useLocation(): LocationState {
-  const [location, setLocation] = useState<ResolvedLocation | null>(() => readSaved());
-  const [loading, setLoading] = useState(() => readSaved() === null);
+  // Starts identical on server and client (localStorage doesn't exist during
+  // SSR) — reading a saved value happens inside the effect below instead of a
+  // lazy initializer, otherwise the client's first paint disagrees with the
+  // server's and React gives up reconciling that subtree (hydration mismatch).
+  const [location, setLocation] = useState<ResolvedLocation | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (location) {
-      // already resolved from a saved value via lazy init above
       return;
     }
 
     let cancelled = false;
+
+    // Deferred to a microtask (rather than called synchronously here) so this
+    // matches the same async-callback shape as the GPS/IP paths below —
+    // setState belongs in a callback reacting to an external read, not
+    // directly in the effect body.
+    const resolveSaved = async (): Promise<boolean> => {
+      const saved = readSaved();
+      if (!saved) return false;
+      if (!cancelled) {
+        setLocation(saved);
+        setLoading(false);
+      }
+      return true;
+    };
 
     const tryIP = async () => {
       try {
@@ -83,39 +102,44 @@ export function useLocation(): LocationState {
       }
     };
 
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          const resolved: ResolvedLocation = {
-            city: '',
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            source: 'gps',
-          };
-          setLocation(resolved);
-          save(resolved);
-          setLoading(false);
-        },
-        () => {
-          // denied, unavailable, or timed out — fall back to IP geolocation
-          void tryIP();
-        },
-        { timeout: 8000, maximumAge: 300_000 },
-      );
-    } else {
-      void tryIP();
-    }
+    void resolveSaved().then((found) => {
+      if (found || cancelled) return;
+
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (cancelled) return;
+            const resolved: ResolvedLocation = {
+              city: '',
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              source: 'gps',
+            };
+            setLocation(resolved);
+            save(resolved);
+            setLoading(false);
+          },
+          () => {
+            // denied, unavailable, or timed out — fall back to IP geolocation
+            void tryIP();
+          },
+          { timeout: 8000, maximumAge: 300_000 },
+        );
+      } else {
+        void tryIP();
+      }
+    });
 
     return () => {
       cancelled = true;
     };
   }, [location]);
 
-  const setManualLocation = (loc: { city: string; lat: number; lon: number }) => {
-    const resolved: ResolvedLocation = { ...loc, source: 'manual' };
+  const setManualLocation = (city: string) => {
+    const resolved: ResolvedLocation = { city, lat: null, lon: null, source: 'manual' };
     setLocation(resolved);
     save(resolved);
+    setError(null);
   };
 
   return { location, loading, error, setManualLocation };
