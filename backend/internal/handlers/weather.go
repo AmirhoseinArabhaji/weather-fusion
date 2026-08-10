@@ -136,3 +136,129 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	c.SSEvent("summary", summaryPayload)
 	c.Writer.Flush()
 }
+
+// dailyProviderEvent is the payload sent for each "provider_daily" SSE event.
+type dailyProviderEvent struct {
+	Provider string                   `json:"provider"`
+	Status   string                   `json:"status"`
+	Data     *models.ProviderForecast `json:"data,omitempty"`
+	Error    string                   `json:"error,omitempty"`
+}
+
+// hourlyProviderEvent is the payload sent for each "provider_hourly" SSE event.
+type hourlyProviderEvent struct {
+	Provider string                         `json:"provider"`
+	Status   string                         `json:"status"`
+	Data     *models.ProviderHourlyForecast `json:"data,omitempty"`
+	Error    string                         `json:"error,omitempty"`
+}
+
+// Forecast godoc
+//
+//	@Summary     Stream daily and hourly forecast
+//	@Description Fans out FetchForecast and FetchHourly to all providers concurrently,
+//	@Description streaming "provider_daily"/"provider_hourly" events as each arrives,
+//	@Description followed by merged "daily" and "hourly" consensus events.
+//	@Tags        weather
+//	@Produce     text/event-stream
+//	@Param       city query string false "City name"
+//	@Param       lat  query number false "Latitude"
+//	@Param       lon  query number false "Longitude"
+//	@Router      /weather/forecast [get]
+func (h *WeatherHandler) Forecast(c *gin.Context) {
+	var req models.WeatherRequest
+	if !middleware.BindQueryAndValidate(c, &req) {
+		return
+	}
+
+	if len(h.providers) == 0 {
+		response.Error(c, http.StatusServiceUnavailable, "NO_PROVIDERS", "no weather providers configured")
+		return
+	}
+
+	ctx := c.Request.Context()
+	dailyEvents := make(chan dailyProviderEvent, len(h.providers))
+	hourlyEvents := make(chan hourlyProviderEvent, len(h.providers))
+
+	var wg sync.WaitGroup
+	for _, p := range h.providers {
+		wg.Add(2)
+		go func(p providers.WeatherProvider) {
+			defer wg.Done()
+			fc, err := p.FetchForecast(ctx, req)
+			if err != nil {
+				h.log.ErrorContext(ctx, "forecast fetch failed", "provider", p.Name(), "error", err)
+				dailyEvents <- dailyProviderEvent{Provider: p.Name(), Status: "error", Error: err.Error()}
+				return
+			}
+			dailyEvents <- dailyProviderEvent{Provider: p.Name(), Status: "ok", Data: fc}
+		}(p)
+		go func(p providers.WeatherProvider) {
+			defer wg.Done()
+			hf, err := p.FetchHourly(ctx, req)
+			if err != nil {
+				h.log.ErrorContext(ctx, "hourly fetch failed", "provider", p.Name(), "error", err)
+				hourlyEvents <- hourlyProviderEvent{Provider: p.Name(), Status: "error", Error: err.Error()}
+				return
+			}
+			hourlyEvents <- hourlyProviderEvent{Provider: p.Name(), Status: "ok", Data: hf}
+		}(p)
+	}
+	go func() {
+		wg.Wait()
+		close(dailyEvents)
+		close(hourlyEvents)
+	}()
+
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	var dailyForecasts []*models.ProviderForecast
+	var hourlyForecasts []*models.ProviderHourlyForecast
+	dailyDone, hourlyDone := false, false
+
+	clientGone := c.Stream(func(w io.Writer) bool {
+		select {
+		case ev, ok := <-dailyEvents:
+			if !ok {
+				dailyDone = true
+				dailyEvents = nil // disable this case now that it's closed
+			} else {
+				if ev.Data != nil {
+					dailyForecasts = append(dailyForecasts, ev.Data)
+				}
+				c.SSEvent("provider_daily", ev)
+			}
+		case ev, ok := <-hourlyEvents:
+			if !ok {
+				hourlyDone = true
+				hourlyEvents = nil
+			} else {
+				if ev.Data != nil {
+					hourlyForecasts = append(hourlyForecasts, ev.Data)
+				}
+				c.SSEvent("provider_hourly", ev)
+			}
+		}
+		return !(dailyDone && hourlyDone)
+	})
+
+	if clientGone {
+		return
+	}
+
+	if len(dailyForecasts) > 0 {
+		c.SSEvent("daily", consensus.MergeDaily(dailyForecasts))
+	} else {
+		c.SSEvent("daily", gin.H{"error": "no providers returned daily data"})
+	}
+	c.Writer.Flush()
+
+	if len(hourlyForecasts) > 0 {
+		c.SSEvent("hourly", consensus.MergeHourly(hourlyForecasts))
+	} else {
+		c.SSEvent("hourly", gin.H{"error": "no providers returned hourly data"})
+	}
+	c.Writer.Flush()
+}

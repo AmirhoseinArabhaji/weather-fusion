@@ -255,6 +255,55 @@ func mapCondition(text string) models.WeatherCondition {
 	}
 }
 
+// hourlyResponse mirrors the Timeline API's response shape with
+// include=hours: hourly readings nested inside each day.
+type hourlyResponse struct {
+	ResolvedAddress string `json:"resolvedAddress"`
+	Days            []struct {
+		Hours []hourEntry `json:"hours"`
+	} `json:"days"`
+}
+
+type hourEntry struct {
+	DatetimeEpoch int64   `json:"datetimeEpoch"`
+	Temp          float64 `json:"temp"`
+	PrecipProb    float64 `json:"precipprob"`
+	Conditions    string  `json:"conditions"`
+}
+
+// FetchHourly retrieves hourly data for the default forecast window (Visual
+// Crossing nests hours inside each day; this flattens them into one list).
+func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
+	raw, err := p.get(ctx, p.buildURL(req, "hours"))
+	if err != nil {
+		return nil, fmt.Errorf("visualcrossing: fetch hourly: %w", err)
+	}
+
+	var parsed hourlyResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("visualcrossing: decode hourly response: %w", err)
+	}
+
+	hourly := &models.ProviderHourlyForecast{
+		Location:    models.Location{City: resolveCityName(req.City, parsed.ResolvedAddress)},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for _, d := range parsed.Days {
+		for _, h := range d.Hours {
+			hourly.Hours = append(hourly.Hours, models.HourlyForecast{
+				Time:        time.Unix(h.DatetimeEpoch, 0).UTC(),
+				Temperature: h.Temp,
+				PrecipProb:  h.PrecipProb / 100,
+				Condition:   mapCondition(h.Conditions),
+				Description: h.Conditions,
+			})
+		}
+	}
+	return hourly, nil
+}
+
 func (p *Provider) IsHealthy(ctx context.Context) bool {
 	return p.apiKey != ""
 }

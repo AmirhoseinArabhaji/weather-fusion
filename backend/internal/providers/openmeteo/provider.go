@@ -363,6 +363,74 @@ func describeWMOCode(code int) string {
 	}
 }
 
+// hourlyResponse mirrors /v1/forecast's "hourly" response shape — columnar,
+// like "daily".
+type hourlyResponse struct {
+	Hourly struct {
+		Time                     []string  `json:"time"`
+		Temperature2m            []float64 `json:"temperature_2m"`
+		PrecipitationProbability []int     `json:"precipitation_probability"`
+		WeatherCode              []int     `json:"weather_code"`
+	} `json:"hourly"`
+}
+
+// FetchHourly retrieves the next 48 hours at hourly resolution.
+func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
+	lat, lon, city, _, err := p.resolveLocation(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("open-meteo: %w", err)
+	}
+
+	raw, err := p.get(ctx, p.buildHourlyURL(lat, lon, req.Units))
+	if err != nil {
+		return nil, fmt.Errorf("open-meteo: fetch hourly: %w", err)
+	}
+
+	var parsed hourlyResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("open-meteo: decode hourly response: %w", err)
+	}
+
+	hourly := &models.ProviderHourlyForecast{
+		Location:    models.Location{City: city, Latitude: lat, Longitude: lon},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for i, t := range parsed.Hourly.Time {
+		hourTime, err := time.ParseInLocation("2006-01-02T15:04", t, time.UTC)
+		if err != nil {
+			continue
+		}
+		hourly.Hours = append(hourly.Hours, models.HourlyForecast{
+			Time:        hourTime,
+			Temperature: parsed.Hourly.Temperature2m[i],
+			PrecipProb:  float64(parsed.Hourly.PrecipitationProbability[i]) / 100,
+			Condition:   mapWMOCode(parsed.Hourly.WeatherCode[i]),
+			Description: describeWMOCode(parsed.Hourly.WeatherCode[i]),
+		})
+	}
+	return hourly, nil
+}
+
+// buildHourlyURL requests exactly the fields our HourlyForecast model uses,
+// capped to the next 48 hours.
+func (p *Provider) buildHourlyURL(lat, lon float64, units string) string {
+	tempUnit := "celsius"
+	if units == "imperial" {
+		tempUnit = "fahrenheit"
+	}
+
+	params := url.Values{}
+	params.Set("latitude", fmt.Sprintf("%f", lat))
+	params.Set("longitude", fmt.Sprintf("%f", lon))
+	params.Set("hourly", "temperature_2m,precipitation_probability,weather_code")
+	params.Set("temperature_unit", tempUnit)
+	params.Set("forecast_hours", "48")
+	params.Set("timezone", "auto")
+	return fmt.Sprintf("%s/forecast?%s", p.baseURL, params.Encode())
+}
+
 func (p *Provider) IsHealthy(ctx context.Context) bool {
 	return true
 }

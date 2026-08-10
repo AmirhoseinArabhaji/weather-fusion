@@ -54,10 +54,14 @@ type WeatherObservation struct {
 }
 
 // DailyForecast holds the predicted conditions for a single day from one provider.
+// TempSpread is only populated by consensus.MergeDaily (0 on a single
+// provider's raw entry) — how much providers disagree on this day's range,
+// not the day's own temperature range.
 type DailyForecast struct {
 	Date        time.Time        `json:"date"`
 	TempMin     float64          `json:"temp_min"`    // °C
 	TempMax     float64          `json:"temp_max"`    // °C
+	TempSpread  float64          `json:"temp_spread"` // °C, cross-provider disagreement — see comment above
 	Humidity    int              `json:"humidity"`    // percent
 	WindSpeed   float64          `json:"wind_speed"`  // m/s
 	PrecipProb  float64          `json:"precip_prob"` // 0–1
@@ -74,19 +78,51 @@ type ProviderForecast struct {
 	FetchedAt   time.Time       `json:"fetched_at"`
 }
 
+// HourlyForecast holds the predicted conditions for a single hour from one provider.
+type HourlyForecast struct {
+	Time        time.Time        `json:"time"`
+	Temperature float64          `json:"temperature"` // °C
+	PrecipProb  float64          `json:"precip_prob"` // 0–1
+	Condition   WeatherCondition `json:"condition"`
+	Description string           `json:"description"`
+}
+
+// ProviderHourlyForecast is a full hourly forecast response from a single provider.
+type ProviderHourlyForecast struct {
+	Location    Location         `json:"location"`
+	Provider    string           `json:"provider"`
+	Hours       []HourlyForecast `json:"hours"`
+	RawResponse json.RawMessage  `json:"raw_response"` // original API JSON
+	FetchedAt   time.Time        `json:"fetched_at"`
+}
+
+// ConsensusHourly is the merged hourly forecast across providers for one hour.
+// Unlike ConsensusResult (averaged from many observations of the *same* current
+// moment), each provider only reports one value per hour here — so TempMin/TempMax
+// represent how much providers disagree on that hour, the same role TempStdDev
+// plays for current weather.
+type ConsensusHourly struct {
+	Time        time.Time        `json:"time"`
+	Temperature float64          `json:"temperature"` // average °C
+	TempMin     float64          `json:"temp_min"`    // lowest provider reading this hour
+	TempMax     float64          `json:"temp_max"`    // highest provider reading this hour
+	PrecipProb  float64          `json:"precip_prob"` // average 0–1
+	Condition   WeatherCondition `json:"condition"`   // majority vote
+}
+
 // ConsensusResult is the merged output of all provider observations for one location.
 // This is what the consensus engine produces and what the API returns to the client.
 type ConsensusResult struct {
-	Location      Location           `json:"location"`
-	Temperature   float64            `json:"temperature"`    // average °C
-	TempStdDev    float64            `json:"temp_std_dev"`   // spread between providers
-	Humidity      float64            `json:"humidity"`       // average percent
-	WindSpeed     float64            `json:"wind_speed"`     // average m/s
-	PrecipProb    float64            `json:"precip_prob"`    // average 0–1
-	Condition     WeatherCondition   `json:"condition"`      // majority vote
-	Confidence    float64            `json:"confidence"`     // 0–1 based on agreement
-	Providers     []WeatherObservation `json:"providers"`    // individual readings
-	GeneratedAt   time.Time          `json:"generated_at"`
+	Location    Location             `json:"location"`
+	Temperature float64              `json:"temperature"`  // average °C
+	TempStdDev  float64              `json:"temp_std_dev"` // spread between providers
+	Humidity    float64              `json:"humidity"`     // average percent
+	WindSpeed   float64              `json:"wind_speed"`   // average m/s
+	PrecipProb  float64              `json:"precip_prob"`  // average 0–1
+	Condition   WeatherCondition     `json:"condition"`    // majority vote
+	Confidence  float64              `json:"confidence"`   // 0–1 based on agreement
+	Providers   []WeatherObservation `json:"providers"`    // individual readings
+	GeneratedAt time.Time            `json:"generated_at"`
 }
 
 // WeatherRequest carries the inbound query parameters.

@@ -35,6 +35,7 @@ func NewRouter(
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/weather/current", weatherHandler.Current)
+	v1.GET("/weather/forecast", weatherHandler.Forecast)
 
 	for _, info := range r.Routes() {
 		log.Debug("route registered", "method", info.Method, "path", info.Path)

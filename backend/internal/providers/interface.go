@@ -20,6 +20,9 @@ type WeatherProvider interface {
 	// FetchForecast retrieves a multi-day forecast for the given location.
 	FetchForecast(ctx context.Context, req models.WeatherRequest) (*models.ProviderForecast, error)
 
+	// FetchHourly retrieves an hourly forecast for the given location.
+	FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error)
+
 	// IsHealthy returns true if the provider's API is reachable.
 	IsHealthy(ctx context.Context) bool
 }

@@ -75,8 +75,8 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-// forecastResponse mirrors the /forecast.json response shape (only the
-// fields our DailyForecast model uses; hourly/astro/alerts are ignored).
+// forecastResponse mirrors the /forecast.json response shape (astro/alerts
+// are ignored; day and hour cover our DailyForecast/HourlyForecast models).
 type forecastResponse struct {
 	Location struct {
 		Name string `json:"name"`
@@ -97,6 +97,15 @@ type forecastResponse struct {
 					Text string `json:"text"`
 				} `json:"condition"`
 			} `json:"day"`
+			Hour []struct {
+				TimeEpoch    int64   `json:"time_epoch"`
+				TempC        float64 `json:"temp_c"`
+				TempF        float64 `json:"temp_f"`
+				ChanceOfRain float64 `json:"chance_of_rain"`
+				Condition    struct {
+					Text string `json:"text"`
+				} `json:"condition"`
+			} `json:"hour"`
 		} `json:"forecastday"`
 	} `json:"forecast"`
 }
@@ -270,6 +279,48 @@ func (p *Provider) buildForecastURL(req models.WeatherRequest, days int) string 
 	params.Set("days", fmt.Sprintf("%d", days))
 	params.Set("q", cityOrCoords(req))
 	return fmt.Sprintf("%s/forecast.json?%s", p.baseURL, params.Encode())
+}
+
+// FetchHourly reuses the same /forecast.json call as FetchForecast — the
+// response already carries an "hour" array per day, just unused until now.
+func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
+	days := req.Days
+	if days == 0 {
+		days = 2 // ~48h of hourly data is plenty; keep the request small
+	}
+
+	raw, err := p.get(ctx, p.buildForecastURL(req, days))
+	if err != nil {
+		return nil, fmt.Errorf("weatherapi: fetch hourly: %w", err)
+	}
+
+	var parsed forecastResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("weatherapi: decode hourly response: %w", err)
+	}
+
+	hourly := &models.ProviderHourlyForecast{
+		Location:    models.Location{City: parsed.Location.Name},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for _, fd := range parsed.Forecast.Forecastday {
+		for _, h := range fd.Hour {
+			temp := h.TempC
+			if req.Units == "imperial" {
+				temp = h.TempF
+			}
+			hourly.Hours = append(hourly.Hours, models.HourlyForecast{
+				Time:        time.Unix(h.TimeEpoch, 0).UTC(),
+				Temperature: temp,
+				PrecipProb:  h.ChanceOfRain / 100,
+				Condition:   mapCondition(h.Condition.Text),
+				Description: h.Condition.Text,
+			})
+		}
+	}
+	return hourly, nil
 }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {

@@ -57,8 +57,8 @@ type weatherResponse struct {
 		Speed float64 `json:"speed"`
 		Deg   int     `json:"deg"`
 	} `json:"wind"`
-	Dt   int64 `json:"dt"`
-	Sys  struct {
+	Dt  int64 `json:"dt"`
+	Sys struct {
 		Country string `json:"country"`
 	} `json:"sys"`
 	Name string `json:"name"`
@@ -344,6 +344,43 @@ func groupIntoDailyForecast(entries []forecastEntry) []models.DailyForecast {
 		})
 	}
 	return days
+}
+
+// FetchHourly reuses the same 3-hour-interval endpoint as FetchForecast, but
+// returns the raw per-timestamp readings instead of bucketing them into days.
+func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
+	raw, err := p.get(ctx, p.buildForecastURL(req, maxForecastPoints))
+	if err != nil {
+		return nil, fmt.Errorf("openweather: fetch hourly: %w", err)
+	}
+
+	var parsed forecastListResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("openweather: decode hourly response: %w", err)
+	}
+
+	hourly := &models.ProviderHourlyForecast{
+		Location:    models.Location{City: parsed.City.Name},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for _, e := range parsed.List {
+		condition := models.ConditionUnknown
+		description := ""
+		if len(e.Weather) > 0 {
+			condition = mapCondition(e.Weather[0].Main)
+			description = e.Weather[0].Description
+		}
+		hourly.Hours = append(hourly.Hours, models.HourlyForecast{
+			Time:        time.Unix(e.Dt, 0).UTC(),
+			Temperature: e.Main.Temp,
+			PrecipProb:  e.Pop,
+			Condition:   condition,
+			Description: description,
+		})
+	}
+	return hourly, nil
 }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {

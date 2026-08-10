@@ -168,6 +168,57 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 	return forecast, nil
 }
 
+// hourlyResponse mirrors /v4/weather/forecast's response shape with timesteps=1h.
+type hourlyResponse struct {
+	Timelines struct {
+		Hourly []hourlyEntry `json:"hourly"`
+	} `json:"timelines"`
+}
+
+type hourlyEntry struct {
+	Time   string `json:"time"`
+	Values struct {
+		Temperature              float64 `json:"temperature"`
+		PrecipitationProbability float64 `json:"precipitationProbability"`
+		WeatherCode              int     `json:"weatherCode"`
+	} `json:"values"`
+}
+
+// FetchHourly retrieves the hourly forecast (tomorrow.io returns up to 120
+// hours / 5 days at 1h resolution, plan-dependent).
+func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
+	raw, err := p.get(ctx, p.buildURL(req, "forecast", "1h"))
+	if err != nil {
+		return nil, fmt.Errorf("tomorrowio: fetch hourly: %w", err)
+	}
+
+	var parsed hourlyResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("tomorrowio: decode hourly response: %w", err)
+	}
+
+	hourly := &models.ProviderHourlyForecast{
+		Location:    models.Location{City: req.City},
+		Provider:    providerName,
+		RawResponse: raw,
+		FetchedAt:   time.Now().UTC(),
+	}
+	for _, e := range parsed.Timelines.Hourly {
+		t, err := time.Parse(time.RFC3339, e.Time)
+		if err != nil {
+			continue
+		}
+		hourly.Hours = append(hourly.Hours, models.HourlyForecast{
+			Time:        t,
+			Temperature: e.Values.Temperature,
+			PrecipProb:  e.Values.PrecipitationProbability / 100,
+			Condition:   mapWeatherCode(e.Values.WeatherCode),
+			Description: describeWeatherCode(e.Values.WeatherCode),
+		})
+	}
+	return hourly, nil
+}
+
 // buildURL prefers city text; falls back to "lat,lon" — tomorrow.io's
 // "location" parameter accepts either natively.
 func (p *Provider) buildURL(req models.WeatherRequest, endpoint, timesteps string) string {
