@@ -3,24 +3,11 @@
 import { useState, type CSSProperties } from 'react';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
+import { useForecastStream } from '@/hooks/use-forecast-stream';
 
 type Units = 'C' | 'F';
 type Theme = 'light' | 'dark';
 type ProviderStatus = 'unavailable' | 'loading' | 'success' | 'failed';
-
-interface HourReading {
-  hourLabel: string;
-  lowC: number;
-  highC: number;
-  rain: number;
-}
-
-interface DayReading {
-  dayLabel: string;
-  lowC: number;
-  highC: number;
-  rain: number;
-}
 
 const SPACE_GROTESK = "var(--font-space-grotesk), 'Space Grotesk', sans-serif";
 const ACCENT = 'oklch(0.55 0.14 235)';
@@ -35,27 +22,15 @@ const PROVIDER_PALETTE = [
   'oklch(0.58 0.11 20)',
 ];
 
-// Demo data — the backend has no forecast or accuracy-tracking endpoint
-// wired up yet, so these stay illustrative until that exists.
-const HOURLY_DATA: HourReading[] = [
-  { hourLabel: '12PM', lowC: 15, highC: 18, rain: 30 },
-  { hourLabel: '1PM', lowC: 16, highC: 19, rain: 35 },
-  { hourLabel: '2PM', lowC: 16, highC: 19, rain: 55 },
-  { hourLabel: '3PM', lowC: 15, highC: 19, rain: 65 },
-  { hourLabel: '4PM', lowC: 15, highC: 18, rain: 75 },
-  { hourLabel: '5PM', lowC: 14, highC: 18, rain: 80 },
-  { hourLabel: '6PM', lowC: 14, highC: 17, rain: 70 },
-  { hourLabel: '7PM', lowC: 13, highC: 16, rain: 50 },
-];
+function formatHourLabel(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(' ', '');
+}
 
-const DAILY_DATA: DayReading[] = [
-  { dayLabel: 'Fri', lowC: 13, highC: 18, rain: 65 },
-  { dayLabel: 'Sat', lowC: 14, highC: 20, rain: 20 },
-  { dayLabel: 'Sun', lowC: 13, highC: 19, rain: 10 },
-  { dayLabel: 'Mon', lowC: 12, highC: 17, rain: 45 },
-  { dayLabel: 'Tue', lowC: 11, highC: 16, rain: 55 },
-];
+function formatDayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString([], { weekday: 'short' });
+}
 
+// Demo — no accuracy-tracking/persistence endpoint exists yet.
 const ACCURACY: { name: string; pct: number }[] = [
   { name: 'openweather', pct: 91 },
   { name: 'weatherapi', pct: 84 },
@@ -196,6 +171,7 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
   const [theme, setTheme] = useState<Theme>('light');
 
   const stream = useWeatherStream(location ? { lat: location.lat, lon: location.lon, units: 'metric' } : null);
+  const forecast = useForecastStream(location ? { lat: location.lat, lon: location.lon, units: 'metric', days: 5 } : null);
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
@@ -204,6 +180,8 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
   const inactiveColor = t.text3;
 
   const display = (c: number) => (units === 'F' ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c)}°C`);
+  // For a temperature *delta* (spread), not an absolute reading — no +32 offset.
+  const displaySpread = (deltaC: number) => `±${(units === 'F' ? (deltaC * 9) / 5 : deltaC).toFixed(1)}°`;
 
   // Real providers, in arrival order — count and identity come from whatever
   // the backend actually has configured, not a fixed list.
@@ -237,25 +215,52 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
   const tempConfidence = confidenceFor(tempStd, 0.8, 1.5, dark);
   const rainConfidence = confidenceFor(rainStd, 12, 22, dark);
 
-  const globalHigh = Math.max(...HOURLY_DATA.map((h) => h.highC));
-  const globalLow = Math.min(...HOURLY_DATA.map((h) => h.lowC));
-  const range = globalHigh - globalLow || 1;
+  // Bar height reflects the actual average temperature for that hour — a
+  // normal hourly chart. temp_max/temp_min (provider spread, see
+  // ConsensusHourly) power the small ± label under each bar instead, so
+  // "how much do sources disagree" doesn't get confused with "the day's real
+  // high/low" shown below.
+  const hourlyRaw = (forecast.hourly ?? []).slice(0, 8);
+  const globalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temperature)) : 0;
+  const globalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temperature)) : 0;
+  const hourlyRange = globalHigh - globalLow || 1;
 
-  const hourly = HOURLY_DATA.map((h) => ({
-    ...h,
-    highDisplay: display(h.highC),
-    lowDisplay: display(h.lowC),
-    barHeight: Math.round(60 + ((h.highC - globalLow) / range) * 130),
-    fillPct: Math.round(((h.highC - h.lowC) / range) * 100) + 35,
-    rainColor: rainColorFor(h.rain, dark),
-  }));
+  const hourly = hourlyRaw.map((h) => {
+    const rain = Math.round(h.precip_prob * 100);
+    return {
+      hourLabel: formatHourLabel(h.time),
+      tempDisplay: display(h.temperature),
+      spreadDisplay: displaySpread(h.temp_max - h.temp_min),
+      rain,
+      barHeight: Math.round(60 + ((h.temperature - globalLow) / hourlyRange) * 130),
+      rainColor: rainColorFor(rain, dark),
+    };
+  });
 
-  const daily = DAILY_DATA.map((d) => ({
-    ...d,
-    highDisplay: display(d.highC),
-    lowDisplay: display(d.lowC),
-    rainColor: rainColorFor(d.rain, dark),
-  }));
+  // Same bar-in-a-track visual as the hourly chart, but daily has two real
+  // numbers (low and high) instead of one — so the fill floats between them
+  // (position + height), rather than growing from the bottom like hourly's
+  // single-value bar does.
+  const dailyRaw = (forecast.daily ?? []).slice(0, 5);
+  const dailyGlobalHigh = dailyRaw.length > 0 ? Math.max(...dailyRaw.map((d) => d.temp_max)) : 0;
+  const dailyGlobalLow = dailyRaw.length > 0 ? Math.min(...dailyRaw.map((d) => d.temp_min)) : 0;
+  const dailyRange = dailyGlobalHigh - dailyGlobalLow || 1;
+
+  const daily = dailyRaw.map((d) => {
+    const rain = Math.round(d.precip_prob * 100);
+    const bottomPct = ((d.temp_min - dailyGlobalLow) / dailyRange) * 100;
+    const topPct = ((d.temp_max - dailyGlobalLow) / dailyRange) * 100;
+    return {
+      dayLabel: formatDayLabel(d.date),
+      highDisplay: display(d.temp_max),
+      lowDisplay: display(d.temp_min),
+      spreadDisplay: displaySpread(d.temp_spread),
+      rain,
+      rainColor: rainColorFor(rain, dark),
+      bottomPct,
+      heightPct: Math.max(topPct - bottomPct, 4), // floor so a narrow range stays visible
+    };
+  });
 
   const consensusTempDisplay = stream.consensus ? display(stream.consensus.temperature) : '—';
   const consensusFeelsDisplay = providers.length > 0 ? display(mean(providers.map((p) => p.feelsC))) : '—';
@@ -453,14 +458,14 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         </div>
       </div>
 
-      {/* Rain + hourly/daily outlook — demo data, no forecast endpoint wired up yet */}
+      {/* Rain + hourly/daily outlook */}
       <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 18, padding: '28px 32px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 18, fontWeight: 600 }}>Rain & hourly outlook (demo)</div>
+          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 18, fontWeight: 600 }}>Rain & hourly outlook</div>
           <div style={{ fontSize: 12, color: rainConfidence.strong }}>{rainDisagreementNote}</div>
         </div>
         <div style={{ fontSize: 12, color: t.text3, marginBottom: 20 }}>
-          Illustrative — forecast API is not connected yet, values below are not real
+          Bar height is temperature; color marks rain chance; ± shows how much providers disagree that hour
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220, padding: '0 4px', marginBottom: 24 }}>
           {hourly.map((h) => (
@@ -468,7 +473,7 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
               key={h.hourLabel}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
             >
-              <div style={{ fontSize: 12, color: t.text2, fontWeight: 600, marginBottom: 8 }}>{h.highDisplay}</div>
+              <div style={{ fontSize: 12, color: t.text2, fontWeight: 600, marginBottom: 8 }}>{h.tempDisplay}</div>
               <div
                 style={{
                   width: 22,
@@ -481,9 +486,9 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
                   overflow: 'hidden',
                 }}
               >
-                <div style={{ width: '100%', background: h.rainColor, borderRadius: 11, height: `${h.fillPct}%` }} />
+                <div style={{ width: '100%', background: h.rainColor, borderRadius: 11, height: '100%' }} />
               </div>
-              <div style={{ fontSize: 12, color: t.text3, marginTop: 8 }}>{h.lowDisplay}</div>
+              <div style={{ fontSize: 11, color: t.text3, marginTop: 8 }}>{h.spreadDisplay}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: h.rainColor, marginTop: 6 }}>{h.rain}%</div>
               <div style={{ fontSize: 12, color: t.text2, marginTop: 4 }}>{h.hourLabel}</div>
             </div>
@@ -491,14 +496,37 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         </div>
         <div style={{ borderTop: `1px solid ${t.borderSoft}`, paddingTop: 20 }}>
           <div style={{ fontSize: 13, color: t.text3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
-            5-day outlook (demo)
+            5-day outlook
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(daily.length, 1)}, 1fr)`, gap: 14 }}>
             {daily.map((d) => (
               <div key={d.dayLabel} style={{ border: `1px solid ${t.border}`, borderRadius: 12, padding: 14, textAlign: 'center' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: t.text2, marginBottom: 8 }}>{d.dayLabel}</div>
+                <div
+                  style={{
+                    width: 22,
+                    height: 90,
+                    margin: '0 auto 10px',
+                    background: t.trackBg,
+                    borderRadius: 11,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: `${d.bottomPct}%`,
+                      height: `${d.heightPct}%`,
+                      width: '100%',
+                      background: d.rainColor,
+                      borderRadius: 11,
+                    }}
+                  />
+                </div>
                 <div style={{ fontFamily: SPACE_GROTESK, fontSize: 20, fontWeight: 600 }}>{d.highDisplay}</div>
-                <div style={{ fontSize: 13, color: t.text3, marginBottom: 8 }}>{d.lowDisplay}</div>
+                <div style={{ fontSize: 13, color: t.text3, marginBottom: 4 }}>{d.lowDisplay}</div>
+                <div style={{ fontSize: 11, color: t.text3, marginBottom: 8 }}>{d.spreadDisplay}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: d.rainColor }}>{d.rain}% rain</div>
               </div>
             ))}

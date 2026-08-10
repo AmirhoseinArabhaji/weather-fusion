@@ -57,3 +57,68 @@ export interface SummaryEvent {
   summary?: string;
   error?: string;
 }
+
+export interface DailyForecast {
+  date: string;
+  temp_min: number;
+  temp_max: number;
+  // Only set by the merged consensus.MergeDaily result (0 on a single
+  // provider's raw entry) — cross-provider disagreement on this day, not
+  // the day's own temperature range (that's temp_min/temp_max above).
+  temp_spread: number;
+  humidity: number;
+  wind_speed: number;
+  precip_prob: number;
+  condition: WeatherCondition;
+  description: string;
+}
+
+export interface ProviderForecast {
+  location: Location;
+  provider: string;
+  days: DailyForecast[];
+  raw_response: unknown;
+  fetched_at: string;
+}
+
+export interface HourlyForecast {
+  time: string;
+  temperature: number;
+  precip_prob: number;
+  condition: WeatherCondition;
+  description: string;
+}
+
+export interface ProviderHourlyForecast {
+  location: Location;
+  provider: string;
+  hours: HourlyForecast[];
+  raw_response: unknown;
+  fetched_at: string;
+}
+
+// Merged hourly consensus — temp_min/temp_max are the spread across
+// providers for that hour (each provider gives one value, not a range),
+// playing the same role ConsensusResult.temp_std_dev plays for current weather.
+export interface ConsensusHourly {
+  time: string;
+  temperature: number;
+  temp_min: number;
+  temp_max: number;
+  precip_prob: number;
+  condition: WeatherCondition;
+}
+
+export interface DailyProviderEvent {
+  provider: string;
+  status: 'ok' | 'error';
+  data?: ProviderForecast;
+  error?: string;
+}
+
+export interface HourlyProviderEvent {
+  provider: string;
+  status: 'ok' | 'error';
+  data?: ProviderHourlyForecast;
+  error?: string;
+}
