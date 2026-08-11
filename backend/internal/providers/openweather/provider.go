@@ -189,7 +189,8 @@ const maxForecastPoints = 40
 type forecastListResponse struct {
 	List []forecastEntry `json:"list"`
 	City struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		Timezone int    `json:"timezone"` // seconds offset from UTC
 	} `json:"city"`
 }
 
@@ -230,12 +231,14 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 		return nil, fmt.Errorf("openweather: decode forecast response: %w", err)
 	}
 
+	offset := parsed.City.Timezone
 	return &models.ProviderForecast{
-		Location:    models.Location{City: parsed.City.Name},
-		Provider:    providerName,
-		Days:        groupIntoDailyForecast(parsed.List),
-		RawResponse: raw,
-		FetchedAt:   time.Now().UTC(),
+		Location:         models.Location{City: parsed.City.Name},
+		Provider:         providerName,
+		Days:             groupIntoDailyForecast(parsed.List, offset),
+		RawResponse:      raw,
+		FetchedAt:        time.Now().UTC(),
+		UTCOffsetSeconds: &offset,
 	}, nil
 }
 
@@ -259,10 +262,14 @@ func (p *Provider) buildForecastURL(req models.WeatherRequest, cnt int) string {
 	return fmt.Sprintf("%s/forecast?%s", p.baseURL, params.Encode())
 }
 
-// groupIntoDailyForecast buckets 3-hourly entries by UTC calendar date:
-// min/max temp across the day, average humidity/wind, the day's highest rain
-// chance, and the most frequently reported condition.
-func groupIntoDailyForecast(entries []forecastEntry) []models.DailyForecast {
+// groupIntoDailyForecast buckets 3-hourly entries by calendar date at the
+// query location (offsetSeconds), not raw UTC date — a fixed UTC-midnight
+// truncation splits one real local day into two whenever the offset pushes a
+// 3-hourly sample's local clock reading onto the other side of midnight from
+// its UTC one (e.g. any positive offset's early-morning local hours land in
+// the *previous* UTC calendar date). Aggregates: min/max temp across the day,
+// average humidity/wind, the day's highest rain chance, most frequent condition.
+func groupIntoDailyForecast(entries []forecastEntry, offsetSeconds int) []models.DailyForecast {
 	type bucket struct {
 		date        time.Time
 		tempMin     float64
@@ -275,16 +282,22 @@ func groupIntoDailyForecast(entries []forecastEntry) []models.DailyForecast {
 		descByCond  map[string]string
 	}
 
+	offset := time.Duration(offsetSeconds) * time.Second
 	buckets := make(map[string]*bucket)
 	var order []string
 
 	for _, e := range entries {
 		t := time.Unix(e.Dt, 0).UTC()
-		key := t.Format("2006-01-02")
+		local := t.Add(offset)
+		key := local.Format("2006-01-02")
 		b, ok := buckets[key]
 		if !ok {
+			// Representative Date = that local calendar day's midnight,
+			// converted back to its true UTC instant — same convention
+			// consensus.MergeDaily expects from every provider.
+			localMidnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 			b = &bucket{
-				date:       t.Truncate(24 * time.Hour),
+				date:       localMidnight.Add(-offset),
 				tempMin:    e.Main.Temp,
 				tempMax:    e.Main.Temp,
 				conditions: map[string]int{},

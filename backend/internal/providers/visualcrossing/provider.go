@@ -103,6 +103,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 // dailyResponse mirrors the Timeline API's response shape with include=days.
 type dailyResponse struct {
 	ResolvedAddress string       `json:"resolvedAddress"`
+	Tzoffset        float64      `json:"tzoffset"` // hours from UTC, e.g. 10 for Sydney
 	Days            []dailyEntry `json:"days"`
 }
 
@@ -134,11 +135,13 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 		entries = entries[:req.Days]
 	}
 
+	offsetSeconds := int(parsed.Tzoffset * 3600)
 	forecast := &models.ProviderForecast{
-		Location:    models.Location{City: resolveCityName(req.City, parsed.ResolvedAddress)},
-		Provider:    providerName,
-		RawResponse: raw,
-		FetchedAt:   time.Now().UTC(),
+		Location:         models.Location{City: resolveCityName(req.City, parsed.ResolvedAddress)},
+		Provider:         providerName,
+		RawResponse:      raw,
+		FetchedAt:        time.Now().UTC(),
+		UTCOffsetSeconds: &offsetSeconds,
 	}
 	for _, d := range entries {
 		forecast.Days = append(forecast.Days, models.DailyForecast{
@@ -258,7 +261,8 @@ func mapCondition(text string) models.WeatherCondition {
 // hourlyResponse mirrors the Timeline API's response shape with
 // include=hours: hourly readings nested inside each day.
 type hourlyResponse struct {
-	ResolvedAddress string `json:"resolvedAddress"`
+	ResolvedAddress string  `json:"resolvedAddress"`
+	Tzoffset        float64 `json:"tzoffset"`
 	Days            []struct {
 		Hours []hourEntry `json:"hours"`
 	} `json:"days"`
@@ -284,11 +288,13 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 		return nil, fmt.Errorf("visualcrossing: decode hourly response: %w", err)
 	}
 
+	offsetSeconds := int(parsed.Tzoffset * 3600)
 	hourly := &models.ProviderHourlyForecast{
-		Location:    models.Location{City: resolveCityName(req.City, parsed.ResolvedAddress)},
-		Provider:    providerName,
-		RawResponse: raw,
-		FetchedAt:   time.Now().UTC(),
+		Location:         models.Location{City: resolveCityName(req.City, parsed.ResolvedAddress)},
+		Provider:         providerName,
+		RawResponse:      raw,
+		FetchedAt:        time.Now().UTC(),
+		UTCOffsetSeconds: &offsetSeconds,
 	}
 	for _, d := range parsed.Days {
 		for _, h := range d.Hours {

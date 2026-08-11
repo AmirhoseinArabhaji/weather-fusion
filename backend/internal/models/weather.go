@@ -76,6 +76,12 @@ type ProviderForecast struct {
 	Days        []DailyForecast `json:"days"`
 	RawResponse json.RawMessage `json:"raw_response"` // original API JSON
 	FetchedAt   time.Time       `json:"fetched_at"`
+	// UTCOffsetSeconds is the query location's UTC offset, when the provider's
+	// own response exposes one — used by consensus.MergeDaily to bucket by the
+	// location's actual local calendar day instead of guessing. Nil when the
+	// provider doesn't report it (its own Date values are still valid absolute
+	// instants either way).
+	UTCOffsetSeconds *int `json:"utc_offset_seconds,omitempty"`
 }
 
 // HourlyForecast holds the predicted conditions for a single hour from one provider.
@@ -89,11 +95,12 @@ type HourlyForecast struct {
 
 // ProviderHourlyForecast is a full hourly forecast response from a single provider.
 type ProviderHourlyForecast struct {
-	Location    Location         `json:"location"`
-	Provider    string           `json:"provider"`
-	Hours       []HourlyForecast `json:"hours"`
-	RawResponse json.RawMessage  `json:"raw_response"` // original API JSON
-	FetchedAt   time.Time        `json:"fetched_at"`
+	Location         Location         `json:"location"`
+	Provider         string           `json:"provider"`
+	Hours            []HourlyForecast `json:"hours"`
+	RawResponse      json.RawMessage  `json:"raw_response"` // original API JSON
+	FetchedAt        time.Time        `json:"fetched_at"`
+	UTCOffsetSeconds *int             `json:"utc_offset_seconds,omitempty"`
 }
 
 // ConsensusHourly is the merged hourly forecast across providers for one hour.

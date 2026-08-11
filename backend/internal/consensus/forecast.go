@@ -31,23 +31,33 @@ func MergeDaily(forecasts []*models.ProviderForecast) []models.DailyForecast {
 		if f == nil {
 			continue
 		}
+		// A "day" is inherently local to the query location, not UTC. Each
+		// provider that exposes its own UTC offset (open-meteo, visualcrossing,
+		// openweather) has already normalised its Date to "true UTC instant of
+		// local midnight" at the source — shifting by that same offset here
+		// recovers the correct calendar-date string for bucketing. A provider
+		// with no known offset (weatherapi, tomorrow.io) gets shift=0: its Date
+		// is trusted as already anchored the way it wants to be truncated —
+		// borrowing another provider's offset here would be wrong as often as
+		// right, since providers don't agree on whether "day" means UTC
+		// midnight or local midnight (confirmed: weatherapi's dates are
+		// UTC-midnight-anchored, so applying a negative offset to them shifted
+		// every entry back one full calendar day at a west-of-UTC location).
+		var shift time.Duration
+		if f.UTCOffsetSeconds != nil {
+			shift = time.Duration(*f.UTCOffsetSeconds) * time.Second
+		}
 		for _, d := range f.Days {
-			// Providers disagree on what a "day" anchors to: some use UTC
-			// midnight, others local midnight at the query location (which,
-			// once normalised to UTC, lands a few hours into the previous
-			// calendar day for positive-offset timezones). A straight UTC
-			// date string then splits one real day into two buckets. Shifting
-			// forward before truncating re-centers the boundary away from
-			// midnight so both conventions land in the same bucket — a
-			// heuristic, not exact for extreme UTC offsets, but covers the
-			// common case without needing each provider's own tz semantics.
-			shifted := d.Date.Add(6 * time.Hour)
+			shifted := d.Date.Add(shift)
 			key := shifted.Format("2006-01-02")
 			b, ok := buckets[key]
 			if !ok {
-				repDate := time.Date(shifted.Year(), shifted.Month(), shifted.Day(), 0, 0, 0, 0, time.UTC)
+				// Same convention as the per-provider Date values feeding this:
+				// the instant stored is local midnight at the query location,
+				// expressed as its true UTC equivalent.
+				localMidnight := time.Date(shifted.Year(), shifted.Month(), shifted.Day(), 0, 0, 0, 0, time.UTC)
 				b = &bucket{
-					date:       repDate,
+					date:       localMidnight.Add(-shift),
 					conditions: map[models.WeatherCondition]int{},
 					descByCond: map[models.WeatherCondition]string{},
 				}

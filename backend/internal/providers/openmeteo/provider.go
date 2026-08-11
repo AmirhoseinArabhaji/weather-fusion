@@ -44,10 +44,11 @@ func (p *Provider) Name() string { return providerName }
 
 // currentResponse mirrors /v1/forecast's "current" response shape.
 type currentResponse struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Timezone  string  `json:"timezone"`
-	Current   struct {
+	Latitude         float64 `json:"latitude"`
+	Longitude        float64 `json:"longitude"`
+	Timezone         string  `json:"timezone"`
+	UTCOffsetSeconds int     `json:"utc_offset_seconds"`
+	Current          struct {
 		Time                string  `json:"time"`
 		Temperature2m       float64 `json:"temperature_2m"`
 		RelativeHumidity2m  int     `json:"relative_humidity_2m"`
@@ -89,9 +90,15 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		return nil, fmt.Errorf("open-meteo: decode response: %w", err)
 	}
 
+	// Open-Meteo's "current.time" is wall-clock time at the query location
+	// (timezone=auto), not UTC — ParseInLocation with time.UTC just attaches a
+	// UTC label to those same digits without converting anything, so the
+	// offset has to be subtracted afterward to land on the real UTC instant.
 	observedAt, err := time.ParseInLocation("2006-01-02T15:04", parsed.Current.Time, time.UTC)
 	if err != nil {
 		observedAt = time.Now().UTC()
+	} else {
+		observedAt = observedAt.Add(-time.Duration(parsed.UTCOffsetSeconds) * time.Second)
 	}
 
 	return &models.WeatherObservation{
@@ -173,7 +180,8 @@ func (p *Provider) buildCurrentURL(lat, lon float64, units string) string {
 // dailyResponse mirrors /v1/forecast's "daily" response shape — columnar
 // (one array per field, aligned by index), not an array of per-day objects.
 type dailyResponse struct {
-	Daily struct {
+	UTCOffsetSeconds int `json:"utc_offset_seconds"`
+	Daily            struct {
 		Time                        []string  `json:"time"`
 		WeatherCode                 []int     `json:"weather_code"`
 		Temperature2mMax            []float64 `json:"temperature_2m_max"`
@@ -207,17 +215,25 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 		return nil, fmt.Errorf("open-meteo: decode forecast response: %w", err)
 	}
 
+	offset := parsed.UTCOffsetSeconds
 	forecast := &models.ProviderForecast{
-		Location:    models.Location{City: city, Latitude: lat, Longitude: lon},
-		Provider:    providerName,
-		RawResponse: raw,
-		FetchedAt:   time.Now().UTC(),
+		Location:         models.Location{City: city, Latitude: lat, Longitude: lon},
+		Provider:         providerName,
+		RawResponse:      raw,
+		FetchedAt:        time.Now().UTC(),
+		UTCOffsetSeconds: &offset,
 	}
 	for i, dateStr := range parsed.Daily.Time {
-		date, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
+		// Same "local wall-clock labeled UTC" shape as FetchCurrent — dateStr
+		// is a calendar date at the query location, not a UTC date. Since a
+		// bare date has no time-of-day, land it on local midnight converted to
+		// UTC (subtract the offset) rather than midnight UTC, so
+		// consensus.MergeDaily buckets it under the correct calendar day.
+		localMidnight, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
 		if err != nil {
 			continue
 		}
+		date := localMidnight.Add(-time.Duration(offset) * time.Second)
 		forecast.Days = append(forecast.Days, models.DailyForecast{
 			Date:        date,
 			TempMin:     parsed.Daily.Temperature2mMin[i],
@@ -366,7 +382,8 @@ func describeWMOCode(code int) string {
 // hourlyResponse mirrors /v1/forecast's "hourly" response shape — columnar,
 // like "daily".
 type hourlyResponse struct {
-	Hourly struct {
+	UTCOffsetSeconds int `json:"utc_offset_seconds"`
+	Hourly           struct {
 		Time                     []string  `json:"time"`
 		Temperature2m            []float64 `json:"temperature_2m"`
 		PrecipitationProbability []int     `json:"precipitation_probability"`
@@ -391,17 +408,20 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 		return nil, fmt.Errorf("open-meteo: decode hourly response: %w", err)
 	}
 
+	offset := parsed.UTCOffsetSeconds
 	hourly := &models.ProviderHourlyForecast{
-		Location:    models.Location{City: city, Latitude: lat, Longitude: lon},
-		Provider:    providerName,
-		RawResponse: raw,
-		FetchedAt:   time.Now().UTC(),
+		Location:         models.Location{City: city, Latitude: lat, Longitude: lon},
+		Provider:         providerName,
+		RawResponse:      raw,
+		FetchedAt:        time.Now().UTC(),
+		UTCOffsetSeconds: &offset,
 	}
 	for i, t := range parsed.Hourly.Time {
 		hourTime, err := time.ParseInLocation("2006-01-02T15:04", t, time.UTC)
 		if err != nil {
 			continue
 		}
+		hourTime = hourTime.Add(-time.Duration(offset) * time.Second)
 		hourly.Hours = append(hourly.Hours, models.HourlyForecast{
 			Time:        hourTime,
 			Temperature: parsed.Hourly.Temperature2m[i],
