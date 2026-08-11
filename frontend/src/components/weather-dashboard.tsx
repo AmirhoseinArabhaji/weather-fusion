@@ -8,19 +8,18 @@ import LocationAutocomplete from './location-autocomplete';
 
 type Units = 'C' | 'F';
 type Theme = 'light' | 'dark';
-type ProviderStatus = 'unavailable' | 'loading' | 'success' | 'failed';
 
 const SPACE_GROTESK = "var(--font-space-grotesk), 'Space Grotesk', sans-serif";
-const ACCENT = 'oklch(0.55 0.14 235)';
+const MONO = "var(--font-jetbrains-mono), 'JetBrains Mono', monospace";
 
 // Assigned to real providers by arrival order — provider identity/count comes
 // from the backend now, not a fixed list, so colors can't be keyed by name.
 const PROVIDER_PALETTE = [
-  'oklch(0.55 0.14 235)',
-  'oklch(0.6 0.1 150)',
-  'oklch(0.68 0.12 70)',
-  'oklch(0.58 0.1 320)',
-  'oklch(0.58 0.11 20)',
+  'oklch(0.68 0.16 235)',
+  'oklch(0.72 0.15 150)',
+  'oklch(0.76 0.14 75)',
+  'oklch(0.68 0.15 320)',
+  'oklch(0.68 0.16 20)',
 ];
 
 function formatHourLabel(iso: string): string {
@@ -31,110 +30,146 @@ function formatDayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString([], { weekday: 'short' });
 }
 
+function capitalize(s: string): string {
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 // Demo — no accuracy-tracking/persistence endpoint exists yet.
 const ACCURACY: { name: string; pct: number }[] = [
   { name: 'openweather', pct: 91 },
+  { name: 'open-meteo', pct: 88 },
+  { name: 'visualcrossing', pct: 86 },
   { name: 'weatherapi', pct: 84 },
+  { name: 'tomorrow.io', pct: 82 },
 ];
 
 export interface ThemeTokens {
   bg: string;
-  card: string;
+  glass: string;
   border: string;
   borderSoft: string;
   trackBg: string;
   text: string;
   text2: string;
   text3: string;
+  ambient: string;
+  heroBg: string;
+  heroBorder: string;
+  heroShadow: string;
+  heroText: string;
+  heroSub: string;
+  heroLabel: string;
 }
 
 function themeTokens(dark: boolean): ThemeTokens {
   return dark
     ? {
-        bg: 'oklch(0.19 0.01 240)',
-        card: 'oklch(0.235 0.012 240)',
-        border: 'oklch(0.32 0.012 240)',
-        borderSoft: 'oklch(0.29 0.012 240)',
-        trackBg: 'oklch(0.29 0.012 240)',
-        text: 'oklch(0.93 0.005 240)',
-        text2: 'oklch(0.8 0.008 240)',
-        text3: 'oklch(0.62 0.01 240)',
+        bg: 'oklch(0.16 0.022 265)',
+        glass: 'oklch(0.225 0.024 265)',
+        border: 'oklch(0.34 0.028 265)',
+        borderSoft: 'oklch(0.29 0.022 265)',
+        trackBg: 'oklch(0.3 0.025 265)',
+        text: 'oklch(0.96 0.008 265)',
+        text2: 'oklch(0.82 0.015 265)',
+        text3: 'oklch(0.63 0.02 265)',
+        ambient:
+          'radial-gradient(ellipse 60% 100% at 18% 0%, oklch(0.42 0.14 262 / 0.55), transparent 65%), radial-gradient(ellipse 55% 90% at 88% 0%, oklch(0.45 0.1 205 / 0.4), transparent 65%)',
+        heroBg: 'linear-gradient(150deg, oklch(0.34 0.11 262), oklch(0.24 0.08 275) 55%, oklch(0.2 0.05 265))',
+        heroBorder: 'oklch(0.5 0.1 262 / 0.55)',
+        heroShadow: '0 20px 60px oklch(0.3 0.15 265 / 0.5)',
+        heroText: 'oklch(0.98 0.01 265)',
+        heroSub: 'oklch(0.82 0.03 265)',
+        heroLabel: 'oklch(0.78 0.06 250)',
       }
     : {
-        bg: 'oklch(0.98 0.006 240)',
-        card: 'oklch(1 0 0)',
-        border: 'oklch(0.9 0.01 240)',
-        borderSoft: 'oklch(0.94 0.006 240)',
-        trackBg: 'oklch(0.93 0.01 240)',
-        text: 'oklch(0.22 0.01 240)',
-        text2: 'oklch(0.35 0.01 240)',
-        text3: 'oklch(0.5 0.01 240)',
+        bg: 'oklch(0.975 0.008 260)',
+        glass: 'oklch(1 0 0)',
+        border: 'oklch(0.89 0.014 260)',
+        borderSoft: 'oklch(0.94 0.01 260)',
+        trackBg: 'oklch(0.92 0.014 260)',
+        text: 'oklch(0.24 0.02 265)',
+        text2: 'oklch(0.38 0.02 265)',
+        text3: 'oklch(0.55 0.02 265)',
+        ambient:
+          'radial-gradient(ellipse 60% 100% at 18% 0%, oklch(0.78 0.11 258 / 0.4), transparent 65%), radial-gradient(ellipse 55% 90% at 88% 0%, oklch(0.85 0.09 200 / 0.4), transparent 65%)',
+        heroBg: 'linear-gradient(150deg, oklch(0.55 0.16 258), oklch(0.42 0.16 275) 60%, oklch(0.36 0.13 280))',
+        heroBorder: 'oklch(0.6 0.14 262 / 0.4)',
+        heroShadow: '0 20px 50px oklch(0.5 0.14 265 / 0.28)',
+        heroText: 'oklch(1 0 0)',
+        heroSub: 'oklch(0.92 0.03 265)',
+        heroLabel: 'oklch(0.88 0.06 250)',
       };
 }
 
 interface Confidence {
   label: 'High' | 'Medium' | 'Low';
   soft: string;
+  ring: string;
   strong: string;
+  pips: { color: string }[];
+}
+
+function pips(filled: number, color: string, dim: string): { color: string }[] {
+  return Array.from({ length: 5 }, (_, i) => ({ color: i < filled ? color : dim }));
 }
 
 function confidenceFor(std: number, lowThresh: number, highThresh: number, dark: boolean): Confidence {
+  const dimPip = dark ? 'oklch(0.4 0.02 265)' : 'oklch(0.88 0.015 265)';
   if (std < lowThresh) {
     return {
       label: 'High',
-      soft: dark ? 'oklch(0.3 0.05 150)' : 'oklch(0.95 0.03 150)',
-      strong: dark ? 'oklch(0.78 0.13 150)' : 'oklch(0.4 0.11 150)',
+      soft: dark ? 'oklch(0.32 0.07 155 / 0.5)' : 'oklch(0.96 0.035 155)',
+      ring: dark ? 'oklch(0.5 0.1 155 / 0.5)' : 'oklch(0.88 0.06 155)',
+      strong: dark ? 'oklch(0.82 0.14 155)' : 'oklch(0.45 0.12 155)',
+      pips: pips(5, dark ? 'oklch(0.78 0.15 150)' : 'oklch(0.55 0.13 150)', dimPip),
     };
   }
   if (std < highThresh) {
     return {
       label: 'Medium',
-      soft: dark ? 'oklch(0.32 0.06 70)' : 'oklch(0.95 0.04 70)',
-      strong: dark ? 'oklch(0.78 0.13 70)' : 'oklch(0.45 0.13 70)',
+      soft: dark ? 'oklch(0.34 0.07 75 / 0.5)' : 'oklch(0.97 0.04 85)',
+      ring: dark ? 'oklch(0.52 0.1 75 / 0.5)' : 'oklch(0.9 0.06 85)',
+      strong: dark ? 'oklch(0.84 0.14 80)' : 'oklch(0.5 0.13 70)',
+      pips: pips(3, dark ? 'oklch(0.8 0.15 80)' : 'oklch(0.62 0.14 70)', dimPip),
     };
   }
   return {
     label: 'Low',
-    soft: dark ? 'oklch(0.32 0.06 30)' : 'oklch(0.95 0.04 70)',
-    strong: dark ? 'oklch(0.75 0.15 30)' : 'oklch(0.5 0.14 30)',
+    soft: dark ? 'oklch(0.34 0.08 25 / 0.5)' : 'oklch(0.97 0.035 30)',
+    ring: dark ? 'oklch(0.52 0.11 25 / 0.5)' : 'oklch(0.91 0.05 30)',
+    strong: dark ? 'oklch(0.8 0.15 28)' : 'oklch(0.54 0.16 28)',
+    pips: pips(1, dark ? 'oklch(0.76 0.17 28)' : 'oklch(0.6 0.17 28)', dimPip),
   };
 }
 
-interface StatusMeta {
+interface ChipMeta {
   label: string;
   dotColor: string;
+  dotGlow: string;
   labelColor: string;
-  animation: string;
+  chipBg: string;
+  chipBorder: string;
 }
 
-function statusMeta(status: ProviderStatus, dark: boolean, text3: string): StatusMeta {
-  const map: Record<ProviderStatus, StatusMeta> = {
-    unavailable: {
-      label: 'Unavailable',
-      dotColor: dark ? 'oklch(0.4 0.008 240)' : 'oklch(0.85 0.005 240)',
-      labelColor: text3,
-      animation: 'none',
-    },
-    loading: {
-      label: 'Loading…',
-      dotColor: ACCENT,
-      labelColor: dark ? 'oklch(0.7 0.12 235)' : 'oklch(0.5 0.12 235)',
-      animation: 'pulseDot 1s ease-in-out infinite',
-    },
-    success: {
-      label: 'Loaded',
-      dotColor: 'oklch(0.6 0.11 150)',
-      labelColor: dark ? 'oklch(0.7 0.12 150)' : 'oklch(0.45 0.1 150)',
-      animation: 'none',
-    },
-    failed: {
-      label: 'Failed',
-      dotColor: 'oklch(0.55 0.16 25)',
-      labelColor: dark ? 'oklch(0.72 0.15 25)' : 'oklch(0.5 0.15 25)',
-      animation: 'none',
-    },
+function chipMetaFor(status: 'ok' | 'error', dark: boolean): ChipMeta {
+  if (status === 'ok') {
+    return {
+      label: 'Live',
+      dotColor: 'oklch(0.72 0.15 150)',
+      dotGlow: '0 0 10px oklch(0.72 0.15 150)',
+      labelColor: dark ? 'oklch(0.8 0.14 150)' : 'oklch(0.48 0.12 150)',
+      chipBg: dark ? 'oklch(0.33 0.07 155 / 0.35)' : 'oklch(0.96 0.03 155)',
+      chipBorder: dark ? 'oklch(0.48 0.09 155 / 0.45)' : 'oklch(0.88 0.05 155)',
+    };
+  }
+  return {
+    label: 'Failed',
+    dotColor: 'oklch(0.62 0.19 25)',
+    dotGlow: '0 0 10px oklch(0.62 0.19 25)',
+    labelColor: dark ? 'oklch(0.76 0.16 25)' : 'oklch(0.52 0.17 25)',
+    chipBg: dark ? 'oklch(0.33 0.08 25 / 0.35)' : 'oklch(0.96 0.03 25)',
+    chipBorder: dark ? 'oklch(0.5 0.1 25 / 0.45)' : 'oklch(0.9 0.05 25)',
   };
-  return map[status];
 }
 
 const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -143,28 +178,27 @@ const stddev = (arr: number[]) => {
   return Math.sqrt(mean(arr.map((v) => (v - m) ** 2)));
 };
 
+// Same two breakpoints drive color/gradient/glow below — named once so they
+// can't drift out of sync across the three lookups.
+const RAIN_LIKELY = 65;
+const RAIN_POSSIBLE = 35;
+
 const rainColorFor = (r: number, dark: boolean) =>
-  r >= 65 ? ACCENT : r >= 35 ? 'oklch(0.68 0.12 70)' : dark ? 'oklch(0.55 0.01 240)' : 'oklch(0.75 0.02 240)';
+  r >= RAIN_LIKELY ? 'oklch(0.62 0.16 245)' : r >= RAIN_POSSIBLE ? 'oklch(0.74 0.14 75)' : dark ? 'oklch(0.6 0.04 250)' : 'oklch(0.72 0.05 240)';
 
-function toggleButtonStyle(active: boolean, activeBg: string, activeColor: string, inactiveColor: string): CSSProperties {
-  return {
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '12.5px',
-    fontWeight: 600,
-    padding: '6px 10px',
-    borderRadius: 7,
-    background: active ? activeBg : 'transparent',
-    color: active ? activeColor : inactiveColor,
-  };
-}
+const gradFor = (r: number, dark: boolean) =>
+  r >= RAIN_LIKELY
+    ? 'linear-gradient(180deg, oklch(0.7 0.15 235), oklch(0.55 0.18 262))'
+    : r >= RAIN_POSSIBLE
+      ? 'linear-gradient(180deg, oklch(0.82 0.13 85), oklch(0.68 0.15 55))'
+      : dark
+        ? 'linear-gradient(180deg, oklch(0.62 0.04 250), oklch(0.48 0.03 255))'
+        : 'linear-gradient(180deg, oklch(0.82 0.04 245), oklch(0.7 0.05 245))';
 
-export interface WeatherDashboardProps {
-  /** Overrides automatic location resolution (GPS -> IP -> saved). */
-  city?: string;
-}
+const glowFor = (r: number) =>
+  r >= RAIN_LIKELY ? '0 0 22px oklch(0.6 0.17 250 / 0.55)' : r >= RAIN_POSSIBLE ? '0 0 20px oklch(0.75 0.14 70 / 0.4)' : 'none';
 
-export default function WeatherDashboard({ city: cityOverride }: WeatherDashboardProps) {
+export default function WeatherDashboard() {
   const { location, loading: locationLoading, error: locationError, setManualLocation } = useLocation();
 
   const [units, setUnits] = useState<Units>('C');
@@ -173,30 +207,42 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
   // Manually-entered locations have no coordinates (no client-side geocoding) —
   // send the city name instead and let the backend resolve it, same as every
   // other city-name query.
-  const locationParams = cityOverride
-    ? { city: cityOverride, units: 'metric' as const }
-    : location
-      ? location.lat != null && location.lon != null
-        ? { lat: location.lat, lon: location.lon, units: 'metric' as const }
-        : { city: location.city, units: 'metric' as const }
-      : null;
+  const locationParams = location
+    ? location.lat != null && location.lon != null
+      ? { lat: location.lat, lon: location.lon, units: 'metric' as const }
+      : { city: location.city, units: 'metric' as const }
+    : null;
 
   const stream = useWeatherStream(locationParams);
   const forecast = useForecastStream(locationParams ? { ...locationParams, days: 5 } : null);
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
-  const activeBg = dark ? 'oklch(0.4 0.02 240)' : 'oklch(1 0 0)';
-  const activeColor = dark ? 'oklch(0.95 0.005 240)' : 'oklch(0.2 0.01 240)';
+  const activeBg = dark ? 'oklch(0.45 0.14 258)' : 'oklch(0.98 0.01 260)';
+  const activeColor = dark ? 'oklch(0.98 0.01 265)' : 'oklch(0.28 0.06 265)';
+  const activeShadow = dark ? '0 0 14px oklch(0.55 0.18 258 / 0.7)' : '0 1px 4px oklch(0.5 0.05 265 / 0.2)';
   const inactiveColor = t.text3;
+  const toggleBtn = (active: boolean, mono: boolean): CSSProperties => ({
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: mono ? MONO : undefined,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: mono ? '7px 11px' : '7px 12px',
+    borderRadius: 9,
+    background: active ? activeBg : 'transparent',
+    color: active ? activeColor : inactiveColor,
+    boxShadow: active ? activeShadow : 'none',
+    transition: 'all 0.18s',
+  });
 
-  const display = (c: number) => (units === 'F' ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c)}°C`);
-  // For a temperature *delta* (spread), not an absolute reading — no +32 offset.
-  const displaySpread = (deltaC: number) => `±${(units === 'F' ? (deltaC * 9) / 5 : deltaC).toFixed(1)}°`;
+  const toValue = (c: number) => (units === 'F' ? Math.round((c * 9) / 5 + 32) : Math.round(c));
+  const display = (c: number) => `${toValue(c)}°${units}`;
+  const displayDeg = (c: number) => `${toValue(c)}°`;
 
   // Real providers, in arrival order — count and identity come from whatever
   // the backend actually has configured, not a fixed list.
-  const providers = stream.providerEvents
+  const rawProviders = stream.providerEvents
     .filter((ev) => ev.status === 'ok' && ev.data)
     .map((ev, i) => {
       const data = ev.data!;
@@ -207,16 +253,29 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         feelsC: data.feels_like,
         condition: data.description || data.condition,
         rainPct: Math.round(data.precip_prob * 100),
-        tempDisplay: display(data.temperature),
       };
     });
 
-  const providerStatuses = stream.providerEvents.map((ev) => ({
-    name: ev.provider,
-    ...statusMeta(ev.status === 'ok' ? 'success' : 'failed', dark, t.text3),
+  const rainMean = rawProviders.length > 0 ? mean(rawProviders.map((p) => p.rainPct)) : 0;
+  const outlierColor = dark ? 'oklch(0.78 0.16 28)' : 'oklch(0.54 0.16 28)';
+  const providers = rawProviders.map((p) => ({
+    ...p,
+    tempDisplay: display(p.tempC),
+    rainOutlierColor: Math.abs(p.rainPct - rainMean) > 25 ? outlierColor : t.text2,
   }));
-  const gatheringLabel =
-    stream.status === 'done' ? 'Data gathered' : stream.status === 'error' ? 'Error loading data' : 'Gathering data…';
+
+  const providerStatuses = stream.providerEvents.map((ev) => {
+    const meta = chipMetaFor(ev.status, dark);
+    return { name: ev.provider, ...meta };
+  });
+  const allSettled = stream.status === 'done' || stream.status === 'error';
+  const gatheringLabel = allSettled
+    ? stream.status === 'error'
+      ? 'Error loading data'
+      : 'Providers synced'
+    : 'Gathering providers';
+  const loadedCountLabel = `${stream.providerEvents.length} responded`;
+  const sweepAnimation = allSettled ? 'none' : 'sweep 2.2s linear infinite';
 
   const temps = providers.map((p) => p.tempC);
   const rains = providers.map((p) => p.rainPct);
@@ -226,59 +285,50 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
   const tempConfidence = confidenceFor(tempStd, 0.8, 1.5, dark);
   const rainConfidence = confidenceFor(rainStd, 12, 22, dark);
 
-  // Bar height reflects the actual average temperature for that hour — a
-  // normal hourly chart. temp_max/temp_min (provider spread, see
-  // ConsensusHourly) power the small ± label under each bar instead, so
-  // "how much do sources disagree" doesn't get confused with "the day's real
-  // high/low" shown below.
+  // Bar container height scales with the hour's high edge (temp_max); the
+  // fill within it represents temp_max/temp_min spread as a proportion of the
+  // visible range — how much providers disagree that hour, not a real
+  // intra-hour temperature range (an hour only has one true average reading).
   const hourlyRaw = (forecast.hourly ?? []).slice(0, 8);
-  const globalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temperature)) : 0;
-  const globalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temperature)) : 0;
-  const hourlyRange = globalHigh - globalLow || 1;
+  const hGlobalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temp_max)) : 0;
+  const hGlobalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temp_min)) : 0;
+  const hourlyRange = hGlobalHigh - hGlobalLow || 1;
 
   const hourly = hourlyRaw.map((h) => {
     const rain = Math.round(h.precip_prob * 100);
     return {
       hourLabel: formatHourLabel(h.time),
-      tempDisplay: display(h.temperature),
-      spreadDisplay: displaySpread(h.temp_max - h.temp_min),
+      highDisplay: displayDeg(h.temp_max),
+      lowDisplay: displayDeg(h.temp_min),
       rain,
-      barHeight: Math.round(60 + ((h.temperature - globalLow) / hourlyRange) * 130),
+      barHeight: `${Math.round(66 + ((h.temp_max - hGlobalLow) / hourlyRange) * 128)}px`,
+      fillPct: Math.round(((h.temp_max - h.temp_min) / hourlyRange) * 100) + 38,
       rainColor: rainColorFor(rain, dark),
+      gradient: gradFor(rain, dark),
+      glow: glowFor(rain),
     };
   });
 
-  // Same bar-in-a-track visual as the hourly chart, but daily has two real
-  // numbers (low and high) instead of one — so the fill floats between them
-  // (position + height), rather than growing from the bottom like hourly's
-  // single-value bar does.
   const dailyRaw = (forecast.daily ?? []).slice(0, 5);
-  const dailyGlobalHigh = dailyRaw.length > 0 ? Math.max(...dailyRaw.map((d) => d.temp_max)) : 0;
-  const dailyGlobalLow = dailyRaw.length > 0 ? Math.min(...dailyRaw.map((d) => d.temp_min)) : 0;
-  const dailyRange = dailyGlobalHigh - dailyGlobalLow || 1;
-
   const daily = dailyRaw.map((d) => {
     const rain = Math.round(d.precip_prob * 100);
-    const bottomPct = ((d.temp_min - dailyGlobalLow) / dailyRange) * 100;
-    const topPct = ((d.temp_max - dailyGlobalLow) / dailyRange) * 100;
     return {
       dayLabel: formatDayLabel(d.date),
-      highDisplay: display(d.temp_max),
-      lowDisplay: display(d.temp_min),
-      spreadDisplay: displaySpread(d.temp_spread),
+      highDisplay: displayDeg(d.temp_max),
+      lowDisplay: displayDeg(d.temp_min),
       rain,
+      condition: d.description || d.condition,
       rainColor: rainColorFor(rain, dark),
-      bottomPct,
-      heightPct: Math.max(topPct - bottomPct, 4), // floor so a narrow range stays visible
     };
   });
 
-  const consensusTempDisplay = stream.consensus ? display(stream.consensus.temperature) : '—';
+  const consensusTempDisplay = stream.consensus ? toValue(stream.consensus.temperature) : '—';
+  const unitSymbol = units === 'F' ? '°F' : '°C';
   const consensusFeelsDisplay = providers.length > 0 ? display(mean(providers.map((p) => p.feelsC))) : '—';
+  const consensusCondition = stream.consensus ? capitalize(stream.consensus.condition) : 'Gathering conditions…';
   const tempSpread = temps.length > 0 ? (Math.max(...temps) - Math.min(...temps)).toFixed(1) : '0.0';
   const rainRangeLabel = rains.length > 0 ? `${Math.min(...rains)}–${Math.max(...rains)}%` : '—';
-  const rainDisagreementNote =
-    rainConfidence.label === 'Low' ? 'Wide disagreement on rain — treat as uncertain' : 'Providers broadly agree on rain chance';
+  const rainDisagreementNote = rainConfidence.label === 'Low' ? 'Wide disagreement on rain' : 'Providers broadly agree';
 
   const llmSummary =
     stream.status === 'error'
@@ -297,77 +347,58 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
         minHeight: '100vh',
         background: t.bg,
         color: t.text,
-        padding: '32px 40px 64px',
-        transition: 'background 0.2s, color 0.2s',
-        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'background 0.3s',
+        fontFamily: SPACE_GROTESK,
       }}
     >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 24,
-          marginBottom: 20,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              background: ACCENT,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <div style={{ width: 14, height: 14, borderRadius: '50%', background: t.bg }} />
-          </div>
-          <div style={{ fontFamily: SPACE_GROTESK, fontWeight: 700, fontSize: 20, letterSpacing: '-0.01em' }}>
-            Weather Fusion
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: t.text3,
-              borderLeft: `1px solid ${t.border}`,
-              paddingLeft: 12,
-              marginLeft: 2,
-            }}
-          >
-            Weather Intelligence Platform
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {cityOverride ? (
+      {/* Ambient field */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 620, pointerEvents: 'none', background: t.ambient }} />
+
+      <div style={{ position: 'relative', maxWidth: 1480, margin: '0 auto', padding: '26px 40px 72px' }}>
+        {/* Nav */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, marginBottom: 22, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
             <div
               style={{
+                width: 34,
+                height: 34,
+                borderRadius: 11,
+                background: 'linear-gradient(145deg, oklch(0.68 0.16 235), oklch(0.5 0.19 275))',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                background: t.card,
-                border: `1px solid ${t.border}`,
-                borderRadius: 10,
-                padding: '9px 14px',
-                fontSize: 14,
-                color: t.text2,
+                justifyContent: 'center',
+                boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)',
               }}
             >
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT }} />
-              {cityOverride}
+              <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#fff', boxShadow: '0 0 10px #fff' }} />
             </div>
-          ) : (
-            // Always editable — GPS/IP resolution runs in the background (see
-            // useLocation) and fills this in once it lands, but typing here
-            // and hitting Set overrides it immediately, whether that
-            // resolution is still pending, still running, or already failed.
+            <div style={{ fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em' }}>Weather Fusion</div>
+            <div
+              style={{
+                fontFamily: MONO,
+                fontSize: 10.5,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: t.text3,
+                border: `1px solid ${t.border}`,
+                borderRadius: 20,
+                padding: '4px 11px',
+              }}
+            >
+              Weather Intelligence
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Always editable — GPS/IP resolution runs in the background (see
+                useLocation) and fills this in once it lands, but typing here
+                and hitting Enter overrides it immediately, whether that
+                resolution is still pending, still running, or already failed. */}
             <LocationAutocomplete
               t={t}
-              accent={ACCENT}
+              dark={dark}
               hasError={!!locationError}
               loading={locationLoading}
               placeholder={
@@ -380,258 +411,380 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
               onSelect={(match) => setManualLocation(match.name, { lat: match.lat, lon: match.lon })}
               onSubmitFreeText={(text) => setManualLocation(text)}
             />
-          )}
-          <div style={{ display: 'flex', background: t.trackBg, borderRadius: 9, padding: 3, gap: 2 }}>
-            <button onClick={() => setUnits('C')} style={toggleButtonStyle(units === 'C', activeBg, activeColor, inactiveColor)}>
-              °C
-            </button>
-            <button onClick={() => setUnits('F')} style={toggleButtonStyle(units === 'F', activeBg, activeColor, inactiveColor)}>
-              °F
-            </button>
-          </div>
-          <div style={{ display: 'flex', background: t.trackBg, borderRadius: 9, padding: 3, gap: 2 }}>
-            <button onClick={() => setTheme('light')} style={toggleButtonStyle(!dark, activeBg, activeColor, inactiveColor)}>
-              Light
-            </button>
-            <button onClick={() => setTheme('dark')} style={toggleButtonStyle(dark, activeBg, activeColor, inactiveColor)}>
-              Dark
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Provider status strip */}
-      <div
-        style={{
-          background: t.card,
-          border: `1px solid ${t.border}`,
-          borderRadius: 12,
-          padding: '12px 18px',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 22,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ fontSize: 12, color: t.text3, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-          {gatheringLabel}
-        </div>
-        {providerStatuses.map((ps) => (
-          <div key={ps.name} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: ps.dotColor, animation: ps.animation }} />
-            <span style={{ fontSize: 13, color: t.text2, fontWeight: 600 }}>{ps.name}</span>
-            <span style={{ fontSize: 12, color: ps.labelColor }}>{ps.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Hero: Consensus + AI Interpretation */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 20, marginBottom: 20 }}>
-        <div
-          style={{
-            background: t.card,
-            border: `1px solid ${t.border}`,
-            borderRadius: 18,
-            padding: '36px 38px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ fontSize: 13, color: t.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Consensus forecast
-          </div>
-          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 92, fontWeight: 600, lineHeight: 1, letterSpacing: '-0.03em' }}>
-            {consensusTempDisplay}
-          </div>
-          <div style={{ fontSize: 16, color: t.text3, marginTop: 10 }}>
-            Feels like {consensusFeelsDisplay} · {providers.length} provider{providers.length === 1 ? '' : 's'} averaged
-          </div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
-            <div style={{ flex: 1, background: tempConfidence.soft, borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: tempConfidence.strong, marginBottom: 4 }}>
-                Temp confidence
-              </div>
-              <div style={{ fontFamily: SPACE_GROTESK, fontSize: 20, fontWeight: 700, color: tempConfidence.strong }}>
-                {tempConfidence.label}
-              </div>
-              <div style={{ fontSize: 12, color: tempConfidence.strong, marginTop: 2 }}>±{tempSpread}° spread</div>
+            <div style={{ display: 'flex', background: t.glass, border: `1px solid ${t.border}`, borderRadius: 12, padding: 3, gap: 2 }}>
+              <button onClick={() => setUnits('C')} style={toggleBtn(units === 'C', true)}>
+                °C
+              </button>
+              <button onClick={() => setUnits('F')} style={toggleBtn(units === 'F', true)}>
+                °F
+              </button>
             </div>
-            <div style={{ flex: 1, background: rainConfidence.soft, borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: rainConfidence.strong, marginBottom: 4 }}>
-                Rain confidence
-              </div>
-              <div style={{ fontFamily: SPACE_GROTESK, fontSize: 20, fontWeight: 700, color: rainConfidence.strong }}>
-                {rainConfidence.label}
-              </div>
-              <div style={{ fontSize: 12, color: rainConfidence.strong, marginTop: 2 }}>{rainRangeLabel}</div>
+            <div style={{ display: 'flex', background: t.glass, border: `1px solid ${t.border}`, borderRadius: 12, padding: 3, gap: 2 }}>
+              <button onClick={() => setTheme('light')} style={toggleBtn(!dark, false)}>
+                Light
+              </button>
+              <button onClick={() => setTheme('dark')} style={toggleBtn(dark, false)}>
+                Dark
+              </button>
             </div>
           </div>
         </div>
 
+        {/* Provider stream rail */}
         <div
           style={{
-            background: t.card,
+            background: t.glass,
             border: `1px solid ${t.border}`,
-            borderRadius: 18,
-            padding: '32px 36px',
+            borderRadius: 16,
+            padding: '13px 20px',
+            marginBottom: 18,
             display: 'flex',
-            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 18,
+            flexWrap: 'wrap',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
-            <div style={{ width: 9, height: 9, borderRadius: '50%', background: ACCENT }} />
-            <div style={{ fontFamily: SPACE_GROTESK, fontSize: 19, fontWeight: 600 }}>AI Interpretation</div>
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: 1,
+              width: '34%',
+              background: 'linear-gradient(90deg, transparent, oklch(0.68 0.16 235), transparent)',
+              animation: sweepAnimation,
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.text3 }}>
+              {gatheringLabel}
+            </span>
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: t.text2 }}>{loadedCountLabel}</span>
           </div>
-          <div style={{ fontSize: 19, lineHeight: 1.6, color: t.text2, flex: 1 }}>{llmSummary}</div>
-          <div style={{ fontSize: 12, color: t.text3, marginTop: 18, paddingTop: 16, borderTop: `1px solid ${t.borderSoft}` }}>
-            Generated from provider consensus data — not an independent forecast.
-          </div>
-        </div>
-      </div>
-
-      {/* Rain + hourly/daily outlook */}
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 18, padding: '28px 32px', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-          <div style={{ fontFamily: SPACE_GROTESK, fontSize: 18, fontWeight: 600 }}>Rain & hourly outlook</div>
-          <div style={{ fontSize: 12, color: rainConfidence.strong }}>{rainDisagreementNote}</div>
-        </div>
-        <div style={{ fontSize: 12, color: t.text3, marginBottom: 20 }}>
-          Bar height is temperature; color marks rain chance; ± shows how much providers disagree that hour
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220, padding: '0 4px', marginBottom: 24 }}>
-          {hourly.map((h) => (
+          <div style={{ width: 1, height: 18, background: t.border }} />
+          {providerStatuses.map((ps) => (
             <div
-              key={h.hourLabel}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}
+              key={ps.name}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: ps.chipBg,
+                border: `1px solid ${ps.chipBorder}`,
+                borderRadius: 20,
+                padding: '5px 12px 5px 10px',
+                transition: 'all 0.3s',
+              }}
             >
-              <div style={{ fontSize: 12, color: t.text2, fontWeight: 600, marginBottom: 8 }}>{h.tempDisplay}</div>
-              <div
-                style={{
-                  width: 22,
-                  background: t.trackBg,
-                  borderRadius: 11,
-                  position: 'relative',
-                  height: h.barHeight,
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  overflow: 'hidden',
-                }}
-              >
-                <div style={{ width: '100%', background: h.rainColor, borderRadius: 11, height: '100%' }} />
-              </div>
-              <div style={{ fontSize: 11, color: t.text3, marginTop: 8 }}>{h.spreadDisplay}</div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: h.rainColor, marginTop: 6 }}>{h.rain}%</div>
-              <div style={{ fontSize: 12, color: t.text2, marginTop: 4 }}>{h.hourLabel}</div>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: ps.dotColor, boxShadow: ps.dotGlow }} />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: t.text2 }}>{ps.name}</span>
+              <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.05em', color: ps.labelColor }}>{ps.label}</span>
             </div>
           ))}
         </div>
-        <div style={{ borderTop: `1px solid ${t.borderSoft}`, paddingTop: 20 }}>
-          <div style={{ fontSize: 13, color: t.text3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
-            5-day outlook
+
+        {/* Hero */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 18, marginBottom: 18 }}>
+          <div
+            style={{
+              position: 'relative',
+              borderRadius: 24,
+              padding: '34px 36px',
+              overflow: 'hidden',
+              background: t.heroBg,
+              border: `1px solid ${t.heroBorder}`,
+              boxShadow: t.heroShadow,
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                right: -70,
+                top: -70,
+                width: 280,
+                height: 280,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, oklch(0.7 0.16 235 / 0.3), transparent 68%)',
+              }}
+            />
+            <div style={{ position: 'relative' }}>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.heroLabel, marginBottom: 14 }}>
+                Consensus forecast
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ fontSize: 104, fontWeight: 600, lineHeight: 0.9, letterSpacing: '-0.045em', color: t.heroText }}>
+                  {consensusTempDisplay}
+                </div>
+                <div style={{ fontSize: 30, fontWeight: 500, color: t.heroLabel, marginTop: 8 }}>{unitSymbol}</div>
+              </div>
+              <div style={{ fontSize: 15, color: t.heroSub, marginTop: 14 }}>
+                {consensusCondition} · feels like {consensusFeelsDisplay}
+              </div>
+
+              <div style={{ display: 'flex', gap: 11, marginTop: 26 }}>
+                <div style={{ flex: 1, background: tempConfidence.soft, border: `1px solid ${tempConfidence.ring}`, borderRadius: 15, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: tempConfidence.strong, marginBottom: 8 }}>
+                    Temperature
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                    <div style={{ fontSize: 21, fontWeight: 700, color: tempConfidence.strong }}>{tempConfidence.label}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: tempConfidence.strong, opacity: 0.75 }}>±{tempSpread}°</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 3, marginTop: 9 }}>
+                    {tempConfidence.pips.map((pip, i) => (
+                      <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: pip.color }} />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ flex: 1, background: rainConfidence.soft, border: `1px solid ${rainConfidence.ring}`, borderRadius: 15, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: rainConfidence.strong, marginBottom: 8 }}>
+                    Precipitation
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                    <div style={{ fontSize: 21, fontWeight: 700, color: rainConfidence.strong }}>{rainConfidence.label}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: rainConfidence.strong, opacity: 0.75 }}>{rainRangeLabel}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 3, marginTop: 9 }}>
+                    {rainConfidence.pips.map((pip, i) => (
+                      <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: pip.color }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(daily.length, 1)}, 1fr)`, gap: 14 }}>
-            {daily.map((d) => (
-              <div key={d.dayLabel} style={{ border: `1px solid ${t.border}`, borderRadius: 12, padding: 14, textAlign: 'center' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: t.text2, marginBottom: 8 }}>{d.dayLabel}</div>
+
+          <div
+            style={{
+              background: t.glass,
+              border: `1px solid ${t.border}`,
+              borderRadius: 24,
+              padding: '30px 34px',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 26,
+                bottom: 26,
+                width: 2,
+                background: 'linear-gradient(180deg, transparent, oklch(0.68 0.16 235), transparent)',
+              }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div
                   style={{
                     width: 22,
-                    height: 90,
-                    margin: '0 auto 10px',
-                    background: t.trackBg,
-                    borderRadius: 11,
-                    position: 'relative',
-                    overflow: 'hidden',
+                    height: 22,
+                    borderRadius: 7,
+                    background: 'linear-gradient(145deg, oklch(0.68 0.16 235), oklch(0.5 0.19 275))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 14px oklch(0.6 0.16 250 / 0.45)',
                   }}
                 >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: `${d.bottomPct}%`,
-                      height: `${d.heightPct}%`,
-                      width: '100%',
-                      background: d.rainColor,
-                      borderRadius: 11,
-                    }}
-                  />
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
                 </div>
-                <div style={{ fontFamily: SPACE_GROTESK, fontSize: 20, fontWeight: 600 }}>{d.highDisplay}</div>
-                <div style={{ fontSize: 13, color: t.text3, marginBottom: 4 }}>{d.lowDisplay}</div>
-                <div style={{ fontSize: 11, color: t.text3, marginBottom: 8 }}>{d.spreadDisplay}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: d.rainColor }}>{d.rain}% rain</div>
+                <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em' }}>AI Interpretation</div>
+              </div>
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: t.text3,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 20,
+                  padding: '4px 10px',
+                }}
+              >
+                Interpreter, not forecaster
+              </div>
+            </div>
+            <div style={{ fontSize: 19.5, lineHeight: 1.65, color: t.text2, flex: 1, letterSpacing: '-0.005em' }}>{llmSummary}</div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: t.text3,
+                marginTop: 20,
+                paddingTop: 16,
+                borderTop: `1px solid ${t.borderSoft}`,
+              }}
+            >
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'oklch(0.7 0.15 150)', boxShadow: '0 0 8px oklch(0.7 0.15 150)' }} />
+              Derived from provider consensus — no independent prediction is made.
+            </div>
+          </div>
+        </div>
+
+        {/* Hourly */}
+        <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 24, padding: '28px 32px', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em' }}>Hourly outlook</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10.5, color: t.text3 }}>
+                <div style={{ width: 9, height: 9, borderRadius: 3, background: 'oklch(0.72 0.05 240)' }} /> Dry
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10.5, color: t.text3 }}>
+                <div style={{ width: 9, height: 9, borderRadius: 3, background: 'oklch(0.74 0.14 75)' }} /> Possible
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10.5, color: t.text3 }}>
+                <div style={{ width: 9, height: 9, borderRadius: 3, background: 'oklch(0.62 0.16 245)' }} /> Likely
+              </div>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, borderLeft: `1px solid ${t.border}`, paddingLeft: 16 }}>
+                Band = provider spread
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 230, marginTop: 22 }}>
+            {hourly.map((h, i) => (
+              <div
+                key={`${h.hourLabel}-${i}`}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  height: '100%',
+                  justifyContent: 'flex-end',
+                  animation: 'riseIn 0.5s ease both',
+                }}
+              >
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 9 }}>{h.highDisplay}</div>
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: 34,
+                    background: t.trackBg,
+                    borderRadius: 17,
+                    height: h.barHeight,
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    overflow: 'hidden',
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ width: '100%', background: h.gradient, borderRadius: 17, height: `${h.fillPct}%`, boxShadow: h.glow }} />
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: t.text3, marginTop: 9 }}>{h.lowDisplay}</div>
+                <div style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: h.rainColor, marginTop: 8 }}>{h.rain}%</div>
+                <div style={{ fontSize: 12, color: t.text2, marginTop: 5 }}>{h.hourLabel}</div>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Rain probability by provider — real, from precip_prob (currently 0
-          for both providers: neither's FetchCurrent populates real rain
-          chance, that's a forecast-only field) */}
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 16, padding: '22px 26px', marginBottom: 20 }}>
-        <div style={{ fontFamily: SPACE_GROTESK, fontSize: 15, fontWeight: 600, marginBottom: 14 }}>
-          Rain probability — by provider
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(providers.length, 1)}, 1fr)`, gap: 20 }}>
-          {providers.map((p) => (
-            <div key={p.name}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-                <span style={{ color: t.text3 }}>{p.name}</span>
-                <span style={{ fontWeight: 700 }}>{p.rainPct}%</span>
-              </div>
-              <div style={{ height: 7, background: t.trackBg, borderRadius: 5, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: p.color, borderRadius: 5, width: `${p.rainPct}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Provider comparison (real) + Historical accuracy (demo — no persistence yet) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.8fr', gap: 18 }}>
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: t.text3, marginBottom: 10 }}>Provider comparison</div>
-          {providers.map((p) => (
+        {/* Daily */}
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(daily.length, 1)}, 1fr)`, gap: 14, marginBottom: 18 }}>
+          {daily.map((d, i) => (
             <div
-              key={p.name}
+              key={`${d.dayLabel}-${i}`}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 0',
-                borderBottom: `1px solid ${t.borderSoft}`,
-                fontSize: 12.5,
+                background: t.glass,
+                border: `1px solid ${t.border}`,
+                borderRadius: 18,
+                padding: 20,
+                position: 'relative',
+                overflow: 'hidden',
+                transition: 'transform 0.2s, border-color 0.2s',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: t.text2 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.color }} />
-                {p.name}
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: d.rainColor, opacity: 0.85 }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>{d.dayLabel}</div>
+                <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color: d.rainColor }}>{d.rain}%</div>
               </div>
-              <div style={{ color: t.text3 }}>
-                {p.tempDisplay} · {p.rainPct}% · {p.condition}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+                <div style={{ fontSize: 27, fontWeight: 600, letterSpacing: '-0.02em' }}>{d.highDisplay}</div>
+                <div style={{ fontFamily: MONO, fontSize: 14, color: t.text3 }}>{d.lowDisplay}</div>
+              </div>
+              <div style={{ fontSize: 12.5, color: t.text3, marginTop: 10 }}>{d.condition}</div>
+              <div style={{ height: 4, background: t.trackBg, borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: d.rainColor, borderRadius: 3, width: `${d.rain}%` }} />
               </div>
             </div>
           ))}
         </div>
 
-        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: t.text3, marginBottom: 10 }}>Track record (30d, demo)</div>
-          {ACCURACY.map((a) => (
-            <div
-              key={a.name}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', fontSize: 12.5, color: t.text3 }}
-            >
-              <span>{a.name}</span>
-              <span style={{ fontWeight: 700, color: 'oklch(0.55 0.13 150)' }}>{a.pct}%</span>
+        {/* Provider detail */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 18 }}>
+          <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: '26px 30px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em' }}>Provider signals</div>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, color: rainConfidence.strong }}>{rainDisagreementNote}</div>
             </div>
-          ))}
-        </div>
-      </div>
+            {providers.map((p) => (
+              <div
+                key={p.name}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '150px 62px 1fr 54px',
+                  alignItems: 'center',
+                  gap: 16,
+                  padding: '11px 0',
+                  borderBottom: `1px solid ${t.borderSoft}`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, boxShadow: `0 0 9px ${p.color}` }} />
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text2 }}>{p.name}</span>
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: t.text }}>{p.tempDisplay}</div>
+                <div style={{ height: 6, background: t.trackBg, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: p.color, borderRadius: 4, width: `${p.rainPct}%`, boxShadow: `0 0 10px ${p.color}` }} />
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 600, textAlign: 'right', color: p.rainOutlierColor }}>{p.rainPct}%</div>
+              </div>
+            ))}
+            <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginTop: 14, letterSpacing: '0.05em' }}>
+              Bar = rain probability reported by that provider
+            </div>
+          </div>
 
-      <div style={{ textAlign: 'center', fontSize: 12, color: t.text3, marginTop: 32 }}>
-        © {new Date().getFullYear()} Amirhosein Arabhaji. All rights reserved.
+          <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: '26px 30px' }}>
+            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em', marginBottom: 4 }}>Track record</div>
+            <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginBottom: 18, letterSpacing: '0.05em' }}>
+              Hit rate over the last 30 days — demo, no accuracy tracking yet
+            </div>
+            {ACCURACY.map((a) => (
+              <div key={a.name} style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: t.text2 }}>{a.name}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'oklch(0.72 0.14 150)' }}>{a.pct}%</span>
+                </div>
+                <div style={{ height: 6, background: t.trackBg, borderRadius: 4, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      background: 'linear-gradient(90deg, oklch(0.7 0.13 175), oklch(0.72 0.15 150))',
+                      borderRadius: 4,
+                      width: `${a.pct}%`,
+                      boxShadow: '0 0 10px oklch(0.72 0.15 150 / 0.6)',
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', fontSize: 12, color: t.text3, marginTop: 32 }}>
+          © {new Date().getFullYear()} Amirhosein Arabhaji. All rights reserved.
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ConsensusHourly, DailyForecast, DailyProviderEvent, HourlyProviderEvent } from '@/lib/weather-types';
+import { buildStreamQuery, parseSSEErrorMessage } from '@/lib/sse';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
 
@@ -58,14 +59,8 @@ export function useForecastStream(params: ForecastStreamParams | null): Forecast
       return;
     }
 
-    const query = new URLSearchParams();
-    if (city) query.set('city', city);
-    if (lat != null) query.set('lat', String(lat));
-    if (lon != null) query.set('lon', String(lon));
-    if (units) query.set('units', units);
-    if (days != null) query.set('days', String(days));
-
-    const source = new EventSource(`${API_BASE_URL}/api/v1/weather/forecast?${query.toString()}`);
+    const query = buildStreamQuery({ city, lat, lon, units, days });
+    const source = new EventSource(`${API_BASE_URL}/api/v1/weather/forecast?${query}`);
 
     source.addEventListener('open', () => {
       setState({
@@ -109,19 +104,9 @@ export function useForecastStream(params: ForecastStreamParams | null): Forecast
       source.close();
     });
 
-    // Same disambiguation as useWeatherStream: a server-sent named "error"
-    // frame (has .data) vs. a connection-level failure (plain Event, no .data).
+    // Same disambiguation as useWeatherStream — see parseSSEErrorMessage.
     source.addEventListener('error', (event) => {
-      const data = event instanceof MessageEvent ? event.data : null;
-      let message = 'connection lost';
-      if (data) {
-        try {
-          message = (JSON.parse(data) as { message?: string }).message ?? data;
-        } catch {
-          message = data;
-        }
-      }
-      setState((s) => ({ ...s, status: 'error', error: message }));
+      setState((s) => ({ ...s, status: 'error', error: parseSSEErrorMessage(event) }));
       source.close();
     });
 

@@ -42,6 +42,33 @@ function save(loc: ResolvedLocation) {
   }
 }
 
+const IP_LOOKUP_TIMEOUT_MS = 5000;
+
+// Single keyless provider — ipwho.is over ipapi.co: same nominal free-tier
+// limit on paper, but ipapi.co actually hit real rate-limit errors repeatedly
+// in practice while ipwho.is never failed once. A timeout still matters even
+// with one provider — a hang (not just an error response) would otherwise
+// block location resolution forever.
+async function fetchIPLocation(): Promise<{ city: string; lat: number; lon: number }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IP_LOOKUP_TIMEOUT_MS);
+  try {
+    const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+    if (!res.ok) throw new Error(`ipwho.is: ${res.status}`);
+    const data = (await res.json()) as Record<string, unknown>;
+    if (!data.success || data.latitude == null || data.longitude == null) {
+      throw new Error('ipwho.is: no coordinates');
+    }
+    return {
+      city: [data.city, data.region].filter(Boolean).join(', ') || (data.country as string) || '',
+      lat: data.latitude as number,
+      lon: data.longitude as number,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Resolves the user's location for the dashboard's default city:
  * saved choice -> browser Geolocation (GPS/wifi, permission-gated) ->
@@ -83,19 +110,9 @@ export function useLocation(): LocationState {
 
     const tryIP = async () => {
       try {
-        const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) throw new Error(`ip lookup failed: ${res.status}`);
-        const data = await res.json();
+        const { city, lat, lon } = await fetchIPLocation();
         if (cancelled) return;
-        if (data.latitude == null || data.longitude == null) {
-          throw new Error('ip lookup returned no coordinates');
-        }
-        const resolved: ResolvedLocation = {
-          city: [data.city, data.region].filter(Boolean).join(', ') || data.country_name || '',
-          lat: data.latitude,
-          lon: data.longitude,
-          source: 'ip',
-        };
+        const resolved: ResolvedLocation = { city, lat, lon, source: 'ip' };
         setLocation(resolved);
         save(resolved);
       } catch (err) {

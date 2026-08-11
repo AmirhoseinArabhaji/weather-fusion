@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ConsensusResult, ProviderEvent, SummaryEvent } from '@/lib/weather-types';
+import { buildStreamQuery, parseSSEErrorMessage } from '@/lib/sse';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
 
@@ -52,13 +53,8 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
       return;
     }
 
-    const query = new URLSearchParams();
-    if (city) query.set('city', city);
-    if (lat != null) query.set('lat', String(lat));
-    if (lon != null) query.set('lon', String(lon));
-    if (units) query.set('units', units);
-
-    const source = new EventSource(`${API_BASE_URL}/api/v1/weather/current?${query.toString()}`);
+    const query = buildStreamQuery({ city, lat, lon, units });
+    const source = new EventSource(`${API_BASE_URL}/api/v1/weather/current?${query}`);
 
     // Connection just opened — clear out whatever the previous params' run left behind.
     source.addEventListener('open', () => {
@@ -85,18 +81,9 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
     // The "error" listener catches two distinct things: a server-sent named
     // "error" SSE frame (has .data, e.g. "no providers responded") and a
     // connection-level failure (plain Event, no .data). Both use the same
-    // EventSource listener per spec, so they're disambiguated here.
+    // EventSource listener per spec, so they're disambiguated in parseSSEErrorMessage.
     source.addEventListener('error', (event) => {
-      const data = event instanceof MessageEvent ? event.data : null;
-      let message = 'connection lost';
-      if (data) {
-        try {
-          message = (JSON.parse(data) as { message?: string }).message ?? data;
-        } catch {
-          message = data;
-        }
-      }
-      setState((s) => ({ ...s, status: 'error', error: message }));
+      setState((s) => ({ ...s, status: 'error', error: parseSSEErrorMessage(event) }));
       source.close();
     });
 

@@ -7,27 +7,30 @@ import type { ThemeTokens } from './weather-dashboard';
 
 export interface LocationAutocompleteProps {
   t: ThemeTokens;
-  accent: string;
+  dark: boolean;
   placeholder: string;
   hasError: boolean;
   /** Pulses the status dot — background GPS/IP location resolution in progress. */
   loading: boolean;
   /** A dropdown pick — exact coordinates already known, no further resolution needed. */
   onSelect: (match: LocationMatch) => void;
-  /** Enter/Set with no suggestion highlighted — just the typed text, backend resolves it. */
+  /** Enter with no suggestion highlighted — just the typed text, backend resolves it. */
   onSubmitFreeText: (text: string) => void;
 }
+
+const DOT = 'oklch(0.68 0.16 235)';
+const ERROR_DOT = 'oklch(0.62 0.19 25)';
 
 /**
  * City input with a debounced autocomplete dropdown (backed by
  * GET /api/v1/locations/search, see use-location-search). Works either way:
- * pick a suggestion for an exact match, or type a city and hit Set/Enter
- * without picking anything — both paths are always available, never gated
- * behind the other.
+ * pick a suggestion for an exact match, or type a city and hit Enter (or the
+ * search button) without picking anything — both paths are always available,
+ * never gated behind the other.
  */
 export default function LocationAutocomplete({
   t,
-  accent,
+  dark,
   placeholder,
   hasError,
   loading,
@@ -38,6 +41,7 @@ export default function LocationAutocomplete({
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { results } = useLocationSearch(open ? query : '');
 
@@ -90,6 +94,8 @@ export default function LocationAutocomplete({
     }
   };
 
+  const dotColor = hasError ? ERROR_DOT : DOT;
+
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <form
@@ -100,24 +106,27 @@ export default function LocationAutocomplete({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          background: t.card,
-          border: `1px solid ${hasError ? 'oklch(0.55 0.16 25)' : t.border}`,
-          borderRadius: 10,
-          padding: '6px 8px 6px 14px',
+          gap: 9,
+          background: t.glass,
+          border: `1px solid ${hasError ? ERROR_DOT : t.border}`,
+          borderRadius: 12,
+          padding: '9px 10px 9px 15px',
+          minWidth: 250,
         }}
       >
         <div
           style={{
-            width: 7,
-            height: 7,
+            width: 6,
+            height: 6,
             borderRadius: '50%',
-            background: hasError ? 'oklch(0.55 0.16 25)' : accent,
-            animation: loading ? 'pulseDot 1s ease-in-out infinite' : 'none',
+            background: dotColor,
+            boxShadow: `0 0 8px ${dotColor}`,
+            animation: loading ? 'pulseDot 1.1s ease-in-out infinite' : 'none',
             flexShrink: 0,
           }}
         />
         <input
+          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -127,22 +136,48 @@ export default function LocationAutocomplete({
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: t.text, width: 220 }}
-        />
-        <button
-          type="submit"
           style={{
             border: 'none',
+            outline: 'none',
+            background: 'transparent',
+            color: t.text,
+            fontSize: 14,
+            fontWeight: 500,
+            width: '100%',
+            fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            if (query.trim()) {
+              confirmSelection();
+            } else {
+              inputRef.current?.focus();
+              setOpen(true);
+            }
+          }}
+          title="Search"
+          aria-label="Search"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            color: t.text3,
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            padding: 0,
+            flexShrink: 0,
             cursor: 'pointer',
-            fontSize: 12.5,
-            fontWeight: 600,
-            padding: '6px 10px',
-            borderRadius: 7,
-            background: accent,
-            color: 'white',
           }}
         >
-          Set
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
         </button>
       </form>
 
@@ -150,15 +185,15 @@ export default function LocationAutocomplete({
         <div
           style={{
             position: 'absolute',
-            top: 'calc(100% + 6px)',
+            top: 'calc(100% + 8px)',
             left: 0,
             right: 0,
-            background: t.card,
+            background: t.glass,
             border: `1px solid ${t.border}`,
-            borderRadius: 10,
+            borderRadius: 12,
             overflow: 'hidden',
             zIndex: 20,
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.16)',
+            boxShadow: dark ? '0 16px 40px rgba(0, 0, 0, 0.5)' : '0 16px 40px rgba(20, 30, 50, 0.18)',
           }}
         >
           {results.map((r, i) => (
@@ -173,7 +208,7 @@ export default function LocationAutocomplete({
               }}
               onMouseEnter={() => setHighlighted(i)}
               style={{
-                padding: '9px 14px',
+                padding: '10px 15px',
                 cursor: 'pointer',
                 fontSize: 13.5,
                 background: highlighted === i ? t.trackBg : 'transparent',
