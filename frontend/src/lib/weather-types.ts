@@ -109,6 +109,15 @@ export interface ConsensusHourly {
   condition: WeatherCondition;
 }
 
+// Mirrors backend/internal/geocoding.LocationMatch (GET /api/v1/locations/search).
+export interface LocationMatch {
+  name: string;
+  admin1: string;
+  country: string;
+  lat: number;
+  lon: number;
+}
+
 export interface DailyProviderEvent {
   provider: string;
   status: 'ok' | 'error';

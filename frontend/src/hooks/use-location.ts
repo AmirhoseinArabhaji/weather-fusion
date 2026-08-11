@@ -17,7 +17,10 @@ export interface LocationState {
   location: ResolvedLocation | null;
   loading: boolean;
   error: string | null;
-  setManualLocation: (city: string) => void;
+  // coords omitted (free-text submit, no known coordinates yet — the backend
+  // resolves the name itself) or given (a specific autocomplete pick, so no
+  // further resolution ambiguity).
+  setManualLocation: (city: string, coords?: { lat: number; lon: number }) => void;
 }
 
 const STORAGE_KEY = 'weather-fusion:location';
@@ -135,8 +138,13 @@ export function useLocation(): LocationState {
     };
   }, [location]);
 
-  const setManualLocation = (city: string) => {
-    const resolved: ResolvedLocation = { city, lat: null, lon: null, source: 'manual' };
+  const setManualLocation = (city: string, coords?: { lat: number; lon: number }) => {
+    const resolved: ResolvedLocation = {
+      city,
+      lat: coords?.lat ?? null,
+      lon: coords?.lon ?? null,
+      source: 'manual',
+    };
     setLocation(resolved);
     save(resolved);
     setError(null);

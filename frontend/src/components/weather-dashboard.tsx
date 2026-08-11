@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
+import LocationAutocomplete from './location-autocomplete';
 
 type Units = 'C' | 'F';
 type Theme = 'light' | 'dark';
@@ -36,7 +37,7 @@ const ACCURACY: { name: string; pct: number }[] = [
   { name: 'weatherapi', pct: 84 },
 ];
 
-interface ThemeTokens {
+export interface ThemeTokens {
   bg: string;
   card: string;
   border: string;
@@ -168,15 +169,6 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
 
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
-  const [manualInput, setManualInput] = useState('');
-
-  const handleLocationSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const trimmed = manualInput.trim();
-    if (!trimmed) return;
-    setManualLocation(trimmed);
-    setManualInput('');
-  };
 
   // Manually-entered locations have no coordinates (no client-side geocoding) —
   // send the city name instead and let the backend resolve it, same as every
@@ -373,47 +365,21 @@ export default function WeatherDashboard({ city: cityOverride }: WeatherDashboar
             // useLocation) and fills this in once it lands, but typing here
             // and hitting Set overrides it immediately, whether that
             // resolution is still pending, still running, or already failed.
-            <form
-              onSubmit={handleLocationSubmit}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                background: t.card,
-                border: `1px solid ${locationError ? 'oklch(0.55 0.16 25)' : t.border}`,
-                borderRadius: 10,
-                padding: '6px 8px 6px 14px',
-              }}
-            >
-              <div
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: '50%',
-                  background: locationError ? 'oklch(0.55 0.16 25)' : ACCENT,
-                  animation: locationLoading ? 'pulseDot 1s ease-in-out infinite' : 'none',
-                  flexShrink: 0,
-                }}
-              />
-              <input
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                placeholder={
-                  locationError
-                    ? 'Location lookup failed — enter a city'
-                    : location
-                      ? location.city || 'Current location — or enter a city'
-                      : 'Resolving location… or enter a city'
-                }
-                style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: t.text, width: 220 }}
-              />
-              <button
-                type="submit"
-                style={{ border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, padding: '6px 10px', borderRadius: 7, background: ACCENT, color: 'white' }}
-              >
-                Set
-              </button>
-            </form>
+            <LocationAutocomplete
+              t={t}
+              accent={ACCENT}
+              hasError={!!locationError}
+              loading={locationLoading}
+              placeholder={
+                locationError
+                  ? 'Location lookup failed — enter a city'
+                  : location
+                    ? location.city || 'Current location — or enter a city'
+                    : 'Resolving location… or enter a city'
+              }
+              onSelect={(match) => setManualLocation(match.name, { lat: match.lat, lon: match.lon })}
+              onSubmitFreeText={(text) => setManualLocation(text)}
+            />
           )}
           <div style={{ display: 'flex', background: t.trackBg, borderRadius: 9, padding: 3, gap: 2 }}>
             <button onClick={() => setUnits('C')} style={toggleButtonStyle(units === 'C', activeBg, activeColor, inactiveColor)}>
