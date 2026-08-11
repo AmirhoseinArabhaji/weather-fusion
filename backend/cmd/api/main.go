@@ -13,6 +13,7 @@ import (
 
 	"github.com/amirhosein/weather-fusion/internal/cache/redis"
 	"github.com/amirhosein/weather-fusion/internal/config"
+	"github.com/amirhosein/weather-fusion/internal/geocoding/photon"
 	"github.com/amirhosein/weather-fusion/internal/handlers"
 	"github.com/amirhosein/weather-fusion/internal/llm/gemini"
 	"github.com/amirhosein/weather-fusion/internal/providers"
@@ -60,7 +61,8 @@ func Run() {
 	// Build weather providers, LLM client, and wire the HTTP router
 	weatherProviders := buildProviders(cfg, log)
 	llmClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiMaxTokens, log)
-	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient)
+	geocoder := photon.New(log)
+	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient, geocoder)
 
 	// Configure HTTP server
 	srv := &http.Server{

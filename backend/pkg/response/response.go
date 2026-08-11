@@ -2,6 +2,8 @@
 package response
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,6 +17,10 @@ type ErrorBody struct {
 	Code    string      `json:"code"`
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
+}
+
+func OK(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusOK, Envelope{Success: true, Data: data})
 }
 
 // Error helpers
