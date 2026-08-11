@@ -14,24 +14,27 @@ weather-fusion/
 
 ## How It Works
 
-1. Fetch forecasts from multiple providers (OpenWeather, Open-Meteo, WeatherAPI, etc.)
+1. Fetch forecasts from five providers at once (OpenWeather, WeatherAPI, Open-Meteo, Visual Crossing, Tomorrow.io)
 2. Normalize all responses into a common schema
 3. Run a consensus engine — calculate averages, standard deviation, and provider agreement
 4. Produce a confidence score based on how much providers agree
-5. Pass results to an LLM to generate a plain-language weather summary
+5. Stream provider results and the consensus to the frontend as they're ready, then pass the consensus to an LLM for a plain-language summary
 
 The LLM acts as an interpreter, not a predictor. It explains the data — it does not decide what the weather will be.
+
+City search (the autocomplete dropdown) is a separate lookup, not tied to any weather provider — it goes through its own geocoding service (Photon, OpenStreetMap-based) so every provider gets fetched with the exact same coordinates.
 
 ---
 
 ## Architecture
 
 ```
-Weather APIs
+Weather APIs (fetched concurrently)
     ├── OpenWeather
-    ├── Open-Meteo
     ├── WeatherAPI
-    └── Visual Crossing
+    ├── Open-Meteo
+    ├── Visual Crossing
+    └── Tomorrow.io
 
             ↓
 
@@ -40,14 +43,13 @@ Data Normalization Layer
             ↓
 
 Consensus & Confidence Engine
+            │
+            ├──→ streamed to frontend immediately (provider results + consensus)
+            │
+            └──→ LLM summary (generated after, streamed separately)
 
-            ↓
-
-LLM Summary Generator
-
-            ↓
-
-Frontend / REST API
+Geocoding (Photon) is a parallel, independent path — resolves a typed city
+name into coordinates for the autocomplete dropdown, no weather provider involved.
 ```
 
 ---
