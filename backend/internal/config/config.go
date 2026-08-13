@@ -41,6 +41,8 @@ type Config struct {
 	VisualCrossingBaseURL string
 	TomorrowIOAPIKey      string
 	TomorrowIOBaseURL     string
+	WeatherbitAPIKey      string
+	WeatherbitBaseURL     string
 
 	GeminiAPIKey    string
 	GeminiModel     string
@@ -88,6 +90,9 @@ func Load() (*Config, error) {
 
 		TomorrowIOAPIKey:  getEnv("TOMORROWIO_API_KEY", ""),
 		TomorrowIOBaseURL: getEnv("TOMORROWIO_BASE_URL", "https://api.tomorrow.io/v4"),
+
+		WeatherbitAPIKey:  getEnv("WEATHERBIT_API_KEY", ""),
+		WeatherbitBaseURL: getEnv("WEATHERBIT_BASE_URL", "https://api.weatherbit.io/v2.0"),
 
 		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-flash-latest"),
