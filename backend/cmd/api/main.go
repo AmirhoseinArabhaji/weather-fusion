@@ -17,6 +17,7 @@ import (
 	"github.com/amirhosein/weather-fusion/internal/handlers"
 	"github.com/amirhosein/weather-fusion/internal/llm/gemini"
 	"github.com/amirhosein/weather-fusion/internal/providers"
+	"github.com/amirhosein/weather-fusion/internal/providers/metno"
 	"github.com/amirhosein/weather-fusion/internal/providers/openmeteo"
 	"github.com/amirhosein/weather-fusion/internal/providers/openweather"
 	"github.com/amirhosein/weather-fusion/internal/providers/tomorrowio"
@@ -108,5 +109,6 @@ func buildProviders(cfg *config.Config, log *slog.Logger) []providers.WeatherPro
 		visualcrossing.New(cfg.VisualCrossingAPIKey, cfg.VisualCrossingBaseURL, log),
 		tomorrowio.New(cfg.TomorrowIOAPIKey, cfg.TomorrowIOBaseURL, log),
 		weatherbit.New(cfg.WeatherbitAPIKey, cfg.WeatherbitBaseURL, log),
+		metno.New("", cfg.MetnoBaseURL, cfg.MetnoUserAgent, log),
 	}
 }

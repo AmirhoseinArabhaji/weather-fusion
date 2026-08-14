@@ -43,6 +43,8 @@ type Config struct {
 	TomorrowIOBaseURL     string
 	WeatherbitAPIKey      string
 	WeatherbitBaseURL     string
+	MetnoBaseURL          string
+	MetnoUserAgent        string
 
 	GeminiAPIKey    string
 	GeminiModel     string
@@ -93,6 +95,9 @@ func Load() (*Config, error) {
 
 		WeatherbitAPIKey:  getEnv("WEATHERBIT_API_KEY", ""),
 		WeatherbitBaseURL: getEnv("WEATHERBIT_BASE_URL", "https://api.weatherbit.io/v2.0"),
+
+		MetnoBaseURL:   getEnv("METNO_BASE_URL", "https://api.met.no/weatherapi/locationforecast/2.0"),
+		MetnoUserAgent: getEnv("METNO_USER_AGENT", "weather-fusion github.com/amirhosein/weather-fusion"),
 
 		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-flash-latest"),
