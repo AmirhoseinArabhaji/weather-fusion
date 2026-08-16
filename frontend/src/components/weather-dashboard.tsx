@@ -23,7 +23,7 @@ const PROVIDER_PALETTE = [
 ];
 
 function formatHourLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', hour12: true }).replace(' ', '');
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 
 function formatDayLabel(iso: string): string {
@@ -289,7 +289,7 @@ export default function WeatherDashboard() {
   // fill within it represents temp_max/temp_min spread as a proportion of the
   // visible range — how much providers disagree that hour, not a real
   // intra-hour temperature range (an hour only has one true average reading).
-  const hourlyRaw = (forecast.hourly ?? []).slice(0, 8);
+  const hourlyRaw = (forecast.hourly ?? []).slice(0, 24);
   const hGlobalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temp_max)) : 0;
   const hGlobalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temp_min)) : 0;
   const hourlyRange = hGlobalHigh - hGlobalLow || 1;
@@ -650,12 +650,12 @@ export default function WeatherDashboard() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 230, marginTop: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 230, marginTop: 22, overflowX: 'auto', paddingBottom: 4 }}>
             {hourly.map((h, i) => (
               <div
                 key={`${h.hourLabel}-${i}`}
                 style={{
-                  flex: 1,
+                  flex: '0 0 44px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
