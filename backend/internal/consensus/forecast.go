@@ -117,12 +117,22 @@ func MergeHourly(forecasts []*models.ProviderHourlyForecast) []models.ConsensusH
 	buckets := map[int64]*bucket{}
 	var order []int64
 
+	// Some providers (weatherapi, visualcrossing) return their full local
+	// day starting at local midnight rather than from the current hour —
+	// at positive UTC offsets that includes hours already in the past.
+	// Drop anything before the current hour so the merged result always
+	// starts at "now", regardless of which providers do this.
+	cutoff := time.Now().UTC().Truncate(time.Hour)
+
 	for _, f := range forecasts {
 		if f == nil {
 			continue
 		}
 		for _, h := range f.Hours {
 			truncated := h.Time.Truncate(time.Hour)
+			if truncated.Before(cutoff) {
+				continue
+			}
 			key := truncated.Unix()
 			b, ok := buckets[key]
 			if !ok {

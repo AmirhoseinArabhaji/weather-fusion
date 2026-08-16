@@ -391,14 +391,24 @@ type hourlyResponse struct {
 	} `json:"hourly"`
 }
 
-// FetchHourly retrieves the next 48 hours at hourly resolution.
+// FetchHourly retrieves hourly-resolution data for req.Days ahead (default
+// 2 days / 48h), capped to Open-Meteo's own 16-day/384h hourly limit.
 func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (*models.ProviderHourlyForecast, error) {
 	lat, lon, city, _, err := p.resolveLocation(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("open-meteo: %w", err)
 	}
 
-	raw, err := p.get(ctx, p.buildHourlyURL(lat, lon, req.Units))
+	days := req.Days
+	if days == 0 {
+		days = 2
+	}
+	hours := days * 24
+	if hours > 384 {
+		hours = 384
+	}
+
+	raw, err := p.get(ctx, p.buildHourlyURL(lat, lon, req.Units, hours))
 	if err != nil {
 		return nil, fmt.Errorf("open-meteo: fetch hourly: %w", err)
 	}
@@ -434,8 +444,8 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 }
 
 // buildHourlyURL requests exactly the fields our HourlyForecast model uses,
-// capped to the next 48 hours.
-func (p *Provider) buildHourlyURL(lat, lon float64, units string) string {
+// for the given number of hours ahead.
+func (p *Provider) buildHourlyURL(lat, lon float64, units string, hours int) string {
 	tempUnit := "celsius"
 	if units == "imperial" {
 		tempUnit = "fahrenheit"
@@ -446,7 +456,7 @@ func (p *Provider) buildHourlyURL(lat, lon float64, units string) string {
 	params.Set("longitude", fmt.Sprintf("%f", lon))
 	params.Set("hourly", "temperature_2m,precipitation_probability,weather_code")
 	params.Set("temperature_unit", tempUnit)
-	params.Set("forecast_hours", "48")
+	params.Set("forecast_hours", fmt.Sprintf("%d", hours))
 	params.Set("timezone", "auto")
 	return fmt.Sprintf("%s/forecast?%s", p.baseURL, params.Encode())
 }
