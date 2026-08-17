@@ -360,20 +360,13 @@ export default function WeatherDashboard() {
         {/* Nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, marginBottom: 22, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 11,
-                background: 'linear-gradient(145deg, oklch(0.68 0.16 235), oklch(0.5 0.19 275))',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)',
-              }}
-            >
-              <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#fff', boxShadow: '0 0 10px #fff' }} />
-            </div>
+            <img
+              src="/icon.png"
+              alt="Weather Fusion"
+              width={34}
+              height={34}
+              style={{ width: 50, height: 50, borderRadius: '50%', boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)' }}
+            />
             <div style={{ fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em' }}>Weather Fusion</div>
             <div
               style={{
