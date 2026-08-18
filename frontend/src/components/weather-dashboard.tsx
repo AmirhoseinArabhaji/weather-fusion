@@ -245,6 +245,14 @@ export default function WeatherDashboard() {
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  // Drives the local-time clock in the consensus panel. 15s is plenty for a
+  // minute-precision display without re-rendering every second for nothing.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15000);
+    return () => clearInterval(id);
+  }, []);
+
   // Manually-entered locations have no coordinates (no client-side geocoding) —
   // send the city name instead and let the backend resolve it, same as every
   // other city-name query.
@@ -374,6 +382,15 @@ export default function WeatherDashboard() {
   const consensusCondition = stream.consensus ? capitalize(stream.consensus.condition) : 'Gathering conditions…';
   const consensusIconSet = CONDITION_ICON[stream.consensus?.condition ?? 'unknown'];
   const ConsensusConditionIcon = (stream.consensus?.is_day ?? true) ? consensusIconSet.day : consensusIconSet.night;
+  const localTimeDisplay = (() => {
+    const timezone = stream.consensus?.location.timezone;
+    if (!timezone) return null;
+    try {
+      return new Intl.DateTimeFormat([], { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+    } catch {
+      return null; // an unrecognized timezone string shouldn't crash the render
+    }
+  })();
   const tempSpread = temps.length > 0 ? (Math.max(...temps) - Math.min(...temps)).toFixed(1) : '0.0';
   const rainRangeLabel = rains.length > 0 ? `${Math.min(...rains)}–${Math.max(...rains)}%` : '—';
   const rainDisagreementNote = rainConfidence.label === 'Low' ? 'Wide disagreement on rain' : 'Providers broadly agree';
@@ -562,8 +579,13 @@ export default function WeatherDashboard() {
               }}
             />
             <div style={{ position: 'relative' }}>
-              <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.heroLabel, marginBottom: 14 }}>
-                Consensus forecast
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.heroLabel }}>
+                  Consensus forecast
+                </div>
+                {localTimeDisplay && (
+                  <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: t.heroText, opacity: 0.85 }}>{localTimeDisplay}</div>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
