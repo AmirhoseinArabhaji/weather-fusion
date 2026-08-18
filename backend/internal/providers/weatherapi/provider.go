@@ -52,6 +52,7 @@ type currentResponse struct {
 		LastUpdatedEpoch int64   `json:"last_updated_epoch"`
 		TempC            float64 `json:"temp_c"`
 		TempF            float64 `json:"temp_f"`
+		IsDay            int     `json:"is_day"` // 1 = day, 0 = night
 		Condition        struct {
 			Text string `json:"text"`
 			Code int    `json:"code"`
@@ -145,6 +146,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		WindDir:     parsed.Current.WindDegree,
 		Visibility:  visibility,
 		UVIndex:     parsed.Current.UV,
+		IsDay:       boolPtr(parsed.Current.IsDay == 1),
 		Condition:   mapCondition(parsed.Current.Condition.Text),
 		Description: parsed.Current.Condition.Text,
 		RawResponse: raw,
@@ -202,6 +204,8 @@ func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
 	return body, nil
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 // mapCondition normalises WeatherAPI's free-text condition into our shared
 // WeatherCondition enum. Keyword-based since the numeric condition codes
 // aren't documented in full.
@@ -210,7 +214,9 @@ func mapCondition(text string) models.WeatherCondition {
 	switch {
 	case strings.Contains(t, "thunder"):
 		return models.ConditionThunder
-	case strings.Contains(t, "snow"), strings.Contains(t, "sleet"), strings.Contains(t, "ice"), strings.Contains(t, "blizzard"):
+	case strings.Contains(t, "sleet"), strings.Contains(t, "ice"), strings.Contains(t, "blizzard"):
+		return models.ConditionSleet
+	case strings.Contains(t, "snow"):
 		return models.ConditionSnow
 	case strings.Contains(t, "rain"), strings.Contains(t, "drizzle"), strings.Contains(t, "shower"):
 		return models.ConditionRain

@@ -59,6 +59,7 @@ type currentResponse struct {
 		PressureMsl         float64 `json:"pressure_msl"`
 		CloudCover          int     `json:"cloud_cover"`
 		Visibility          float64 `json:"visibility"`
+		IsDay               int     `json:"is_day"` // 1 = day, 0 = night
 	} `json:"current"`
 }
 
@@ -118,6 +119,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		WindDir:     parsed.Current.WindDirection10m,
 		Visibility:  parsed.Current.Visibility / 1000, // metres -> km
 		Condition:   mapWMOCode(parsed.Current.WeatherCode),
+		IsDay:       boolPtr(parsed.Current.IsDay == 1),
 		Description: describeWMOCode(parsed.Current.WeatherCode),
 		RawResponse: raw,
 		ObservedAt:  observedAt,
@@ -170,7 +172,7 @@ func (p *Provider) buildCurrentURL(lat, lon float64, units string) string {
 	params.Set("latitude", fmt.Sprintf("%f", lat))
 	params.Set("longitude", fmt.Sprintf("%f", lon))
 	params.Set("current", "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"+
-		"wind_speed_10m,wind_direction_10m,pressure_msl,cloud_cover,visibility")
+		"wind_speed_10m,wind_direction_10m,pressure_msl,cloud_cover,visibility,is_day")
 	params.Set("temperature_unit", tempUnit)
 	params.Set("wind_speed_unit", windUnit)
 	params.Set("timezone", "auto")
@@ -302,6 +304,8 @@ func mapWMOCode(code int) models.WeatherCondition {
 		return models.ConditionCloudy
 	case code == 45 || code == 48:
 		return models.ConditionFog
+	case code == 56 || code == 57 || code == 66 || code == 67:
+		return models.ConditionSleet // freezing drizzle/rain
 	case code >= 51 && code <= 67:
 		return models.ConditionRain
 	case code >= 80 && code <= 82:
@@ -314,6 +318,8 @@ func mapWMOCode(code int) models.WeatherCondition {
 		return models.ConditionUnknown
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // describeWMOCode returns a short human-readable label for a WMO weather code.
 func describeWMOCode(code int) string {

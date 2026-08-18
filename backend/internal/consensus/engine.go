@@ -34,6 +34,7 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 		WindSpeed:   avgWind,
 		PrecipProb:  avgPrecip,
 		Condition:   condition,
+		IsDay:       majorityIsDay(observations),
 		Confidence:  confidence,
 		Providers:   dereferenceAll(observations),
 		GeneratedAt: time.Now().UTC(),
@@ -107,6 +108,24 @@ func majorityCondition(obs []*models.WeatherObservation) models.WeatherCondition
 		}
 	}
 	return best
+}
+
+// majorityIsDay votes among providers that report a day/night signal (not
+// all do — see each provider's IsDay comment). Defaults to true when none do,
+// since a "day" icon is the more common/expected default.
+func majorityIsDay(obs []*models.WeatherObservation) bool {
+	var day, night int
+	for _, o := range obs {
+		if o.IsDay == nil {
+			continue
+		}
+		if *o.IsDay {
+			day++
+		} else {
+			night++
+		}
+	}
+	return night <= day
 }
 
 // confidenceScore combines provider response ratio with temperature agreement.

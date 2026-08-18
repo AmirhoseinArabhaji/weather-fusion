@@ -59,6 +59,8 @@ type conditions struct {
 	Visibility    float64 `json:"visibility"`
 	PrecipProb    float64 `json:"precipprob"` // forecast-only per docs; expect 0 for current
 	Conditions    string  `json:"conditions"`
+	SunriseEpoch  int64   `json:"sunriseEpoch"`
+	SunsetEpoch   int64   `json:"sunsetEpoch"`
 }
 
 func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) (*models.WeatherObservation, error) {
@@ -93,6 +95,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		Visibility:  cc.Visibility,
 		PrecipProb:  cc.PrecipProb / 100,
 		Condition:   mapCondition(cc.Conditions),
+		IsDay:       isDayFromSun(cc.DatetimeEpoch, cc.SunriseEpoch, cc.SunsetEpoch),
 		Description: cc.Conditions,
 		RawResponse: raw,
 		ObservedAt:  time.Unix(cc.DatetimeEpoch, 0).UTC(),
@@ -243,7 +246,9 @@ func mapCondition(text string) models.WeatherCondition {
 	switch {
 	case strings.Contains(t, "thunder"):
 		return models.ConditionThunder
-	case strings.Contains(t, "snow"), strings.Contains(t, "ice"):
+	case strings.Contains(t, "ice"), strings.Contains(t, "sleet"):
+		return models.ConditionSleet
+	case strings.Contains(t, "snow"):
 		return models.ConditionSnow
 	case strings.Contains(t, "rain"), strings.Contains(t, "drizzle"):
 		return models.ConditionRain
@@ -256,6 +261,18 @@ func mapCondition(text string) models.WeatherCondition {
 	default:
 		return models.ConditionUnknown
 	}
+}
+
+// isDayFromSun derives day/night from the observation time against that
+// day's sunrise/sunset — Visual Crossing's icon field only distinguishes
+// day/night for a couple of conditions (clear, partly-cloudy), so the raw
+// sun times are the reliable signal.
+func isDayFromSun(observedAt, sunrise, sunset int64) *bool {
+	if sunrise == 0 && sunset == 0 {
+		return nil
+	}
+	isDay := observedAt >= sunrise && observedAt < sunset
+	return &isDay
 }
 
 // hourlyResponse mirrors the Timeline API's response shape with

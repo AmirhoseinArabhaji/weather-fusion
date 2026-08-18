@@ -1,4 +1,4 @@
-	// Package metno implements the WeatherProvider interface for MET Norway's
+// Package metno implements the WeatherProvider interface for MET Norway's
 // Locationforecast API, a free weather API that requires no API key.
 package metno
 
@@ -159,6 +159,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		WindDir:     int(d.WindFromDirection),
 		PrecipProb:  entry.precipProb(),
 		Condition:   mapSymbolCode(entry.symbolCode()),
+		IsDay:       symbolIsDay(entry.symbolCode()),
 		Description: describeSymbolCode(entry.symbolCode()),
 		RawResponse: raw,
 		ObservedAt:  observedAt,
@@ -384,7 +385,7 @@ func mapSymbolCode(code string) models.WeatherCondition {
 	case strings.Contains(code, "snow"):
 		return models.ConditionSnow
 	case strings.Contains(code, "sleet"):
-		return models.ConditionSnow // icy mix — closer to snow than plain rain
+		return models.ConditionSleet
 	case strings.Contains(code, "rain"):
 		return models.ConditionRain
 	case strings.Contains(code, "fog"):
@@ -399,6 +400,25 @@ func mapSymbolCode(code string) models.WeatherCondition {
 		return models.ConditionUnknown
 	}
 }
+
+// symbolIsDay reads the _day/_night suffix MET Norway attaches to symbol
+// codes that visually differ by daylight (e.g. "clearsky_day" vs
+// "clearsky_night"). Not every code has one — an overcast sky looks the same
+// at any hour — so codes without either suffix return nil rather than
+// guessing. _polartwilight (the sun near the horizon, common at high
+// latitudes) is treated as day.
+func symbolIsDay(code string) *bool {
+	switch {
+	case strings.HasSuffix(code, "_day"), strings.HasSuffix(code, "_polartwilight"):
+		return boolPtr(true)
+	case strings.HasSuffix(code, "_night"):
+		return boolPtr(false)
+	default:
+		return nil
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
 
 // describeSymbolCode turns a symbol_code into a short human-readable label
 // by dropping the _day/_night/_polartwilight suffix and underscores.

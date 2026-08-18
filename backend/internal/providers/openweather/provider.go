@@ -87,9 +87,11 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 
 	condition := models.ConditionUnknown
 	description := ""
+	var isDay *bool
 	if len(parsed.Weather) > 0 {
-		condition = mapCondition(parsed.Weather[0].Main)
+		condition = mapCondition(parsed.Weather[0].ID, parsed.Weather[0].Main)
 		description = parsed.Weather[0].Description
+		isDay = iconIsDay(parsed.Weather[0].Icon)
 	}
 
 	return &models.WeatherObservation{
@@ -108,6 +110,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		WindDir:     parsed.Wind.Deg,
 		Visibility:  parsed.Visibility / 1000, // metres -> km
 		Condition:   condition,
+		IsDay:       isDay,
 		Description: description,
 		RawResponse: raw,
 		ObservedAt:  time.Unix(parsed.Dt, 0).UTC(),
@@ -160,9 +163,14 @@ func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
 	return body, nil
 }
 
-// mapCondition normalises OpenWeatherMap's "main" weather group into our
-// shared WeatherCondition enum.
-func mapCondition(main string) models.WeatherCondition {
+// mapCondition normalises OpenWeatherMap's weather condition into our shared
+// WeatherCondition enum. Sleet (ids 611-613: Sleet/Light Shower Sleet/Shower
+// Sleet) is classified under OWM's "Snow" group but has its own id range, so
+// it's checked before falling back to the main-string switch.
+func mapCondition(id int, main string) models.WeatherCondition {
+	if id >= 611 && id <= 613 {
+		return models.ConditionSleet
+	}
 	switch strings.ToLower(main) {
 	case "clear":
 		return models.ConditionClear
@@ -179,6 +187,16 @@ func mapCondition(main string) models.WeatherCondition {
 	default:
 		return models.ConditionUnknown
 	}
+}
+
+// iconIsDay reads OpenWeatherMap's icon code (e.g. "01d"/"01n") — the last
+// character is always 'd' or 'n'.
+func iconIsDay(icon string) *bool {
+	if icon == "" {
+		return nil
+	}
+	isDay := strings.HasSuffix(icon, "d")
+	return &isDay
 }
 
 // maxForecastPoints is the free 5 Day / 3 Hour Forecast API's hard cap:
@@ -280,6 +298,7 @@ func groupIntoDailyForecast(entries []forecastEntry, offsetSeconds int) []models
 		count       int
 		conditions  map[string]int
 		descByCond  map[string]string
+		sawSleetID  bool // any entry in this bucket had a sleet-range id (611-613)
 	}
 
 	offset := time.Duration(offsetSeconds) * time.Second
@@ -323,6 +342,9 @@ func groupIntoDailyForecast(entries []forecastEntry, offsetSeconds int) []models
 			if _, seen := b.descByCond[main]; !seen {
 				b.descByCond[main] = e.Weather[0].Description
 			}
+			if id := e.Weather[0].ID; id >= 611 && id <= 613 {
+				b.sawSleetID = true
+			}
 		}
 		b.count++
 	}
@@ -345,6 +367,10 @@ func groupIntoDailyForecast(entries []forecastEntry, offsetSeconds int) []models
 			avgWind = b.windSum / float64(b.count)
 		}
 
+		condition := mapCondition(0, majorCondition)
+		if majorCondition == "Snow" && b.sawSleetID {
+			condition = models.ConditionSleet
+		}
 		days = append(days, models.DailyForecast{
 			Date:        b.date,
 			TempMin:     b.tempMin,
@@ -352,7 +378,7 @@ func groupIntoDailyForecast(entries []forecastEntry, offsetSeconds int) []models
 			Humidity:    avgHumidity,
 			WindSpeed:   avgWind,
 			PrecipProb:  b.popMax,
-			Condition:   mapCondition(majorCondition),
+			Condition:   condition,
 			Description: b.descByCond[majorCondition],
 		})
 	}
@@ -382,7 +408,7 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 		condition := models.ConditionUnknown
 		description := ""
 		if len(e.Weather) > 0 {
-			condition = mapCondition(e.Weather[0].Main)
+			condition = mapCondition(e.Weather[0].ID, e.Weather[0].Main)
 			description = e.Weather[0].Description
 		}
 		hourly.Hours = append(hourly.Hours, models.HourlyForecast{

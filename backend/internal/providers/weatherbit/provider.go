@@ -60,6 +60,7 @@ type currentResponse struct {
 		Vis         float64           `json:"vis"`
 		UV          float64           `json:"uv"`
 		Precip      float64           `json:"precip"`
+		Pod         string            `json:"pod"` // "d" or "n"
 		Weather     weatherDescriptor `json:"weather"`
 		CityName    string            `json:"city_name"`
 		CountryCode string            `json:"country_code"`
@@ -109,6 +110,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		UVIndex:     d.UV,
 		PrecipProb:  0, // current endpoint reports precip amount, not probability
 		Condition:   mapWeatherCode(d.Weather.Code),
+		IsDay:       podIsDay(d.Pod),
 		Description: d.Weather.Description,
 		RawResponse: raw,
 		ObservedAt:  observedAt,
@@ -285,6 +287,8 @@ func mapWeatherCode(code int) models.WeatherCondition {
 		return models.ConditionRain
 	case code >= 500 && code <= 522:
 		return models.ConditionRain
+	case code >= 610 && code <= 613:
+		return models.ConditionSleet // rain/snow mix, sleet, heavy sleet, sleet showers
 	case code >= 600 && code <= 623:
 		return models.ConditionSnow
 	case code == 741 || code == 751:
@@ -299,6 +303,19 @@ func mapWeatherCode(code int) models.WeatherCondition {
 		return models.ConditionUnknown
 	}
 }
+
+func podIsDay(pod string) *bool {
+	switch pod {
+	case "d":
+		return boolPtr(true)
+	case "n":
+		return boolPtr(false)
+	default:
+		return nil
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
 
 func (p *Provider) IsHealthy(ctx context.Context) bool {
 	return p.apiKey != ""

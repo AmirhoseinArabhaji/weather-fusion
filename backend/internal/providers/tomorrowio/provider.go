@@ -284,9 +284,9 @@ func mapWeatherCode(code int) models.WeatherCondition {
 	case code == 5000 || code == 5001 || code == 5100 || code == 5101:
 		return models.ConditionSnow
 	case code == 6000 || code == 6001 || code == 6200 || code == 6201:
-		return models.ConditionSnow // freezing rain/drizzle — icy, closer to snow than plain rain
+		return models.ConditionSleet // freezing rain/drizzle
 	case code == 7000 || code == 7101 || code == 7102:
-		return models.ConditionSnow // ice pellets
+		return models.ConditionSleet // ice pellets
 	case code == 8000:
 		return models.ConditionThunder
 	default:
