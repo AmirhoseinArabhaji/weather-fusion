@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocationSearch } from '@/hooks/use-location-search';
 import type { LocationMatch } from '@/lib/weather-types';
-import type { ThemeTokens } from './weather-dashboard';
+import type { ThemeTokens } from './dashboard-theme';
 
 export interface LocationAutocompleteProps {
   t: ThemeTokens;
