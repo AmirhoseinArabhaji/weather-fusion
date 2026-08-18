@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/amirhosein/weather-fusion/internal/llm"
@@ -120,8 +121,36 @@ type apiError struct {
 	} `json:"error"`
 }
 
-// generate calls Gemini's generateContent endpoint with a system + user prompt.
+// generate calls Gemini's generateContent endpoint, retrying on transient
+// regularly enough that a single attempt isn't reliable.
 func (c *Client) generate(ctx context.Context, systemPrompt, userPrompt string) (*llm.LLMResponse, error) {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		resp, err := c.doGenerate(ctx, systemPrompt, userPrompt)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isRetryable(err) {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+func isRetryable(err error) bool {
+	return strings.Contains(err.Error(), "status 503") || strings.Contains(err.Error(), "status 429")
+}
+
+func (c *Client) doGenerate(ctx context.Context, systemPrompt, userPrompt string) (*llm.LLMResponse, error) {
 	if c.apiKey == "" {
 		return nil, fmt.Errorf("gemini: no API key configured")
 	}
