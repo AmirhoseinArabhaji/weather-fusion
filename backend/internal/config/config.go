@@ -52,7 +52,7 @@ type Config struct {
 
 	CORSAllowedOrigins string
 
-	RateLimitNewLocationsPerMinute int
+	RateLimitNewLocationsPerHour int
 
 	LogLevel  string
 	LogFormat string
@@ -107,7 +107,7 @@ func Load() (*Config, error) {
 
 		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 
-		RateLimitNewLocationsPerMinute: getEnvInt("RATE_LIMIT_NEW_LOCATIONS_PER_MINUTE", 5),
+		RateLimitNewLocationsPerHour: getEnvInt("RATE_LIMIT_NEW_LOCATIONS_PER_HOUR", 5),
 
 		LogLevel:  getEnv("LOG_LEVEL", "info"),
 		LogFormat: getEnv("LOG_FORMAT", "json"),

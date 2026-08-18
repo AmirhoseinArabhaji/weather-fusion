@@ -61,9 +61,9 @@ func (h *WeatherHandler) tryServeFromCache(c *gin.Context, key string) bool {
 	return true
 }
 
-const rateLimitWindow = time.Minute
+const rateLimitWindow = time.Hour
 
-// checkRateLimit counts a new-location fetch against the client's per-minute
+// checkRateLimit counts a new-location fetch against the client's per-hour
 // budget. Returns false (and writes a 429) if the budget is exhausted.
 func (h *WeatherHandler) checkRateLimit(c *gin.Context) bool {
 	ctx := c.Request.Context()
@@ -73,9 +73,9 @@ func (h *WeatherHandler) checkRateLimit(c *gin.Context) bool {
 		h.log.WarnContext(ctx, "rate limit check failed, allowing request", "error", err)
 		return true
 	}
-	if int(count) > h.cfg.RateLimitNewLocationsPerMinute {
-		c.Header("Retry-After", "60")
-		response.Error(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many new-location requests, try again in a minute")
+	if int(count) > h.cfg.RateLimitNewLocationsPerHour {
+		c.Header("Retry-After", fmt.Sprintf("%d", int(rateLimitWindow.Seconds())))
+		response.Error(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many new-location requests, try again in an hour")
 		return false
 	}
 	return true
