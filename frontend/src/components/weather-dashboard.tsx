@@ -34,15 +34,6 @@ function capitalize(s: string): string {
   return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// Demo — no accuracy-tracking/persistence endpoint exists yet.
-const ACCURACY: { name: string; pct: number }[] = [
-  { name: 'openweather', pct: 91 },
-  { name: 'open-meteo', pct: 88 },
-  { name: 'visualcrossing', pct: 86 },
-  { name: 'weatherapi', pct: 84 },
-  { name: 'tomorrow.io', pct: 82 },
-];
-
 export interface ThemeTokens {
   bg: string;
   glass: string;
@@ -239,6 +230,10 @@ export default function WeatherDashboard() {
   const toValue = (c: number) => (units === 'F' ? Math.round((c * 9) / 5 + 32) : Math.round(c));
   const display = (c: number) => `${toValue(c)}°${units}`;
   const displayDeg = (c: number) => `${toValue(c)}°`;
+  // delta conversion: a spread (max - min) is not an absolute temp, so it
+  // must scale by 9/5 without the +32 offset toValue applies.
+  const toDelta = (c: number) => (units === 'F' ? Math.round((c * 9) / 5) : Math.round(c));
+  const displaySpread = (c: number) => `±${toDelta(c)}°`;
 
   // Real providers, in arrival order — count and identity come from whatever
   // the backend actually has configured, not a fixed list.
@@ -285,24 +280,24 @@ export default function WeatherDashboard() {
   const tempConfidence = confidenceFor(tempStd, 0.8, 1.5, dark);
   const rainConfidence = confidenceFor(rainStd, 12, 22, dark);
 
-  // Bar container height scales with the hour's high edge (temp_max); the
-  // fill within it represents temp_max/temp_min spread as a proportion of the
-  // visible range — how much providers disagree that hour, not a real
-  // intra-hour temperature range (an hour only has one true average reading).
+  // Bar container height scales with the hour's actual average temperature.
+  // Provider disagreement (temp_max - temp_min) is shown as a separate ±X°
+  // label rather than folded into the fill height — an hour has one real
+  // reading, so overloading bar/fill geometry with a second variable (spread)
+  // on top of temp + rain color made none of the three easy to read at a glance.
   const hourlyRaw = (forecast.hourly ?? []).slice(0, 24);
-  const hGlobalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temp_max)) : 0;
-  const hGlobalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temp_min)) : 0;
+  const hGlobalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temperature)) : 0;
+  const hGlobalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temperature)) : 0;
   const hourlyRange = hGlobalHigh - hGlobalLow || 1;
 
   const hourly = hourlyRaw.map((h) => {
     const rain = Math.round(h.precip_prob * 100);
     return {
       hourLabel: formatHourLabel(h.time),
-      highDisplay: displayDeg(h.temp_max),
-      lowDisplay: displayDeg(h.temp_min),
+      tempDisplay: displayDeg(h.temperature),
+      spreadDisplay: displaySpread(h.temp_max - h.temp_min),
       rain,
-      barHeight: `${Math.round(66 + ((h.temp_max - hGlobalLow) / hourlyRange) * 128)}px`,
-      fillPct: Math.round(((h.temp_max - h.temp_min) / hourlyRange) * 100) + 38,
+      barHeight: `${Math.round(66 + ((h.temperature - hGlobalLow) / hourlyRange) * 128)}px`,
       rainColor: rainColorFor(rain, dark),
       gradient: gradFor(rain, dark),
       glow: glowFor(rain),
@@ -639,7 +634,7 @@ export default function WeatherDashboard() {
                 <div style={{ width: 9, height: 9, borderRadius: 3, background: 'oklch(0.62 0.16 245)' }} /> Likely
               </div>
               <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, borderLeft: `1px solid ${t.border}`, paddingLeft: 16 }}>
-                Band = provider spread
+                ±X° = provider spread
               </div>
             </div>
           </div>
@@ -657,7 +652,7 @@ export default function WeatherDashboard() {
                   animation: 'riseIn 0.5s ease both',
                 }}
               >
-                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 9 }}>{h.highDisplay}</div>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 9 }}>{h.tempDisplay}</div>
                 <div
                   style={{
                     width: '100%',
@@ -671,9 +666,9 @@ export default function WeatherDashboard() {
                     position: 'relative',
                   }}
                 >
-                  <div style={{ width: '100%', background: h.gradient, borderRadius: 17, height: `${h.fillPct}%`, boxShadow: h.glow }} />
+                  <div style={{ width: '100%', background: h.gradient, borderRadius: 17, height: '100%', boxShadow: h.glow }} />
                 </div>
-                <div style={{ fontFamily: MONO, fontSize: 11, color: t.text3, marginTop: 9 }}>{h.lowDisplay}</div>
+                <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginTop: 9 }}>{h.spreadDisplay}</div>
                 <div style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: h.rainColor, marginTop: 8 }}>{h.rain}%</div>
                 <div style={{ fontSize: 12, color: t.text2, marginTop: 5 }}>{h.hourLabel}</div>
               </div>
@@ -714,7 +709,7 @@ export default function WeatherDashboard() {
         </div>
 
         {/* Provider detail */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }}>
           <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: '26px 30px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
               <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em' }}>Provider signals</div>
@@ -746,32 +741,6 @@ export default function WeatherDashboard() {
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginTop: 14, letterSpacing: '0.05em' }}>
               Bar = rain probability reported by that provider
             </div>
-          </div>
-
-          <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: '26px 30px' }}>
-            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em', marginBottom: 4 }}>Track record</div>
-            <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginBottom: 18, letterSpacing: '0.05em' }}>
-              Hit rate over the last 30 days — demo, no accuracy tracking yet
-            </div>
-            {ACCURACY.map((a) => (
-              <div key={a.name} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, color: t.text2 }}>{a.name}</span>
-                  <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'oklch(0.72 0.14 150)' }}>{a.pct}%</span>
-                </div>
-                <div style={{ height: 6, background: t.trackBg, borderRadius: 4, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      background: 'linear-gradient(90deg, oklch(0.7 0.13 175), oklch(0.72 0.15 150))',
-                      borderRadius: 4,
-                      width: `${a.pct}%`,
-                      boxShadow: '0 0 10px oklch(0.72 0.15 150 / 0.6)',
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
