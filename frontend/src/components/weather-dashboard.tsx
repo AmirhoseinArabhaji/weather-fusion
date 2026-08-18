@@ -33,6 +33,7 @@ export default function WeatherDashboard() {
 
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
+  const [rateLimitNoticeDismissed, setRateLimitNoticeDismissed] = useState(false);
 
   // Desktop layout is untouched below — isMobile only swaps in narrower
   // values at the handful of spots that actually get cramped on a phone.
@@ -290,6 +291,43 @@ export default function WeatherDashboard() {
             </div>
           </div>
         </div>
+
+        {!rateLimitNoticeDismissed && (
+          <div
+            style={{
+              background: dark ? 'oklch(0.28 0.06 75)' : 'oklch(0.97 0.05 85)',
+              border: `1px solid ${dark ? 'oklch(0.5 0.13 70)' : 'oklch(0.8 0.13 75)'}`,
+              borderRadius: 16,
+              padding: '13px 16px',
+              marginBottom: 18,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+            <span style={{ fontSize: 13, color: dark ? 'oklch(0.9 0.05 85)' : 'oklch(0.4 0.09 70)', lineHeight: 1.4, flex: 1 }}>
+              This site runs on free-tier weather APIs, so requests are heavily rate-limited. Refreshing the same
+              location is fine. searching many new locations quickly may get throttled.
+            </span>
+            <button
+              onClick={() => setRateLimitNoticeDismissed(true)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 16,
+                lineHeight: 1,
+                color: dark ? 'oklch(0.9 0.05 85)' : 'oklch(0.4 0.09 70)',
+                padding: 4,
+                flexShrink: 0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Provider stream rail */}
         <div
