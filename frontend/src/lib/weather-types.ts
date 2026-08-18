@@ -1,7 +1,7 @@
 // Mirrors backend/internal/models/weather.go and the SSE payloads built in
 // backend/internal/handlers/weather.go. Keep field names/casing in sync with the Go JSON tags.
 
-export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'thunder' | 'fog' | 'unknown';
+export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'sleet' | 'thunder' | 'fog' | 'unknown';
 
 export interface Location {
   city: string;
@@ -25,6 +25,8 @@ export interface WeatherObservation {
   uv_index: number;
   precip_prob: number;
   condition: WeatherCondition;
+  // Not every provider reports a day/night signal — see backend comments.
+  is_day?: boolean;
   description: string;
   raw_response: unknown;
   observed_at: string;
@@ -39,6 +41,7 @@ export interface ConsensusResult {
   wind_speed: number;
   precip_prob: number;
   condition: WeatherCondition;
+  is_day: boolean; // majority vote, defaults true when no provider reports one
   confidence: number;
   providers: WeatherObservation[];
   generated_at: string;

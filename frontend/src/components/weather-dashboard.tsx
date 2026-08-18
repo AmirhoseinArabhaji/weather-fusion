@@ -1,9 +1,27 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ComponentType } from 'react';
+import {
+  WiDaySunny,
+  WiNightClear,
+  WiDayCloudy,
+  WiNightAltCloudy,
+  WiDayRain,
+  WiNightAltRain,
+  WiDaySnow,
+  WiNightAltSnow,
+  WiDaySleet,
+  WiNightAltSleet,
+  WiDayThunderstorm,
+  WiNightAltThunderstorm,
+  WiDayFog,
+  WiNightFog,
+  WiNA,
+} from 'weather-icons-react';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
+import type { WeatherCondition } from '@/lib/weather-types';
 import LocationAutocomplete from './location-autocomplete';
 
 type Units = 'C' | 'F';
@@ -28,6 +46,27 @@ function formatHourLabel(iso: string): string {
 
 function formatDayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString([], { weekday: 'short' });
+}
+
+type WeatherIcon = ComponentType<{ size?: number | string; color?: string }>;
+
+// The plain WiNight{Cloudy,Rain,Snow,Sleet,Thunderstorm} icons draw the moon
+// as an unmarked circle (indistinguishable from a sun at a glance) — the
+// "Alt" variants draw an actual crescent, verified by rasterizing both and
+// comparing. WiNightClear/WiNightFog don't have this problem, no Alt needed.
+const CONDITION_ICON: Record<WeatherCondition, { day: WeatherIcon; night: WeatherIcon }> = {
+  clear: { day: WiDaySunny, night: WiNightClear },
+  cloudy: { day: WiDayCloudy, night: WiNightAltCloudy },
+  rain: { day: WiDayRain, night: WiNightAltRain },
+  snow: { day: WiDaySnow, night: WiNightAltSnow },
+  sleet: { day: WiDaySleet, night: WiNightAltSleet },
+  thunder: { day: WiDayThunderstorm, night: WiNightAltThunderstorm },
+  fog: { day: WiDayFog, night: WiNightFog },
+  unknown: { day: WiNA, night: WiNA },
+};
+
+function weatherIconFor(condition: WeatherCondition, isDay: boolean): WeatherIcon {
+  return isDay ? CONDITION_ICON[condition].day : CONDITION_ICON[condition].night;
 }
 
 function capitalize(s: string): string {
@@ -324,6 +363,7 @@ export default function WeatherDashboard() {
       lowDisplay: displayDeg(d.temp_min),
       rain,
       condition: d.description || d.condition,
+      icon: weatherIconFor(d.condition, true), // a whole day has no single day/night state
       rainColor: rainColorFor(rain, dark),
     };
   });
@@ -332,6 +372,8 @@ export default function WeatherDashboard() {
   const unitSymbol = units === 'F' ? '°F' : '°C';
   const consensusFeelsDisplay = providers.length > 0 ? display(mean(providers.map((p) => p.feelsC))) : '—';
   const consensusCondition = stream.consensus ? capitalize(stream.consensus.condition) : 'Gathering conditions…';
+  const consensusIconSet = CONDITION_ICON[stream.consensus?.condition ?? 'unknown'];
+  const ConsensusConditionIcon = (stream.consensus?.is_day ?? true) ? consensusIconSet.day : consensusIconSet.night;
   const tempSpread = temps.length > 0 ? (Math.max(...temps) - Math.min(...temps)).toFixed(1) : '0.0';
   const rainRangeLabel = rains.length > 0 ? `${Math.min(...rains)}–${Math.max(...rains)}%` : '—';
   const rainDisagreementNote = rainConfidence.label === 'Low' ? 'Wide disagreement on rain' : 'Providers broadly agree';
@@ -523,11 +565,33 @@ export default function WeatherDashboard() {
               <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: t.heroLabel, marginBottom: 14 }}>
                 Consensus forecast
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ fontSize: isMobile ? 60 : 104, fontWeight: 600, lineHeight: 0.9, letterSpacing: '-0.045em', color: t.heroText }}>
-                  {consensusTempDisplay}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ fontSize: isMobile ? 60 : 104, fontWeight: 600, lineHeight: 0.9, letterSpacing: '-0.045em', color: t.heroText }}>
+                    {consensusTempDisplay}
+                  </div>
+                  <div style={{ fontSize: isMobile ? 20 : 30, fontWeight: 500, color: t.heroLabel, marginTop: 8 }}>{unitSymbol}</div>
                 </div>
-                <div style={{ fontSize: isMobile ? 20 : 30, fontWeight: 500, color: t.heroLabel, marginTop: 8 }}>{unitSymbol}</div>
+                {/* centered in the space between the temp and the panel's right edge, not flush against it.
+                    minWidth:0 + width:100%/maxWidth (instead of a fixed px size) lets it shrink to fit
+                    whatever room is left at in-between widths instead of overflowing the panel. */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+                  <div
+                    style={{
+                      minWidth: 0,
+                      width: '100%',
+                      maxWidth: isMobile ? 90 : 128,
+                      aspectRatio: '1',
+                      borderRadius: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(155deg, oklch(1 0 0 / 0.18), oklch(1 0 0 / 0.04))',
+                    }}
+                  >
+                    <ConsensusConditionIcon size="65%" color={t.heroText} />
+                  </div>
+                </div>
               </div>
               <div style={{ fontSize: 15, color: t.heroSub, marginTop: 14 }}>
                 {consensusCondition} · feels like {consensusFeelsDisplay}
@@ -724,7 +788,10 @@ export default function WeatherDashboard() {
             >
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: d.rainColor, opacity: 0.85 }} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>{d.dayLabel}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <d.icon size={18} color={t.text3} />
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>{d.dayLabel}</div>
+                </div>
                 <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color: d.rainColor }}>{d.rain}%</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
