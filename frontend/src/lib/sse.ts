@@ -3,6 +3,8 @@
 // ambiguity (a server-sent named frame with .data vs. a connection failure
 // with none).
 
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
+
 export interface StreamParams {
   city?: string;
   lat?: number;

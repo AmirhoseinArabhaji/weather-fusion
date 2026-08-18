@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ConsensusResult, ProviderEvent, SummaryEvent } from '@/lib/weather-types';
-import { buildStreamQuery, parseSSEErrorMessage } from '@/lib/sse';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
+import { API_BASE_URL, buildStreamQuery, parseSSEErrorMessage } from '@/lib/sse';
 
 export interface WeatherStreamParams {
   city?: string;

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import type { LocationMatch } from '@/lib/weather-types';
+import { API_BASE_URL } from '@/lib/sse';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
 
