@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"unicode"
 
 	"github.com/amirhosein/weather-fusion/internal/geocoding"
 )
@@ -37,6 +38,7 @@ func New(log *slog.Logger) geocoding.LocationSearch {
 type searchResponse struct {
 	Features []struct {
 		Properties struct {
+			OsmKey  string `json:"osm_key"`
 			Name    string `json:"name"`
 			City    string `json:"city"`
 			State   string `json:"state"`
@@ -92,14 +94,18 @@ func (g *Geocoder) Search(ctx context.Context, query string, limit int) ([]geoco
 	matches := make([]geocoding.LocationMatch, 0, len(parsed.Features))
 	seen := make(map[string]bool, len(parsed.Features))
 	for _, f := range parsed.Features {
-		// "city" is the reliable place name for city-level results;
-		// "name" alone can be a street, POI, or neighbourhood — fall back to
-		// it only when Photon didn't tag a city.
-		name := f.Properties.City
-		if name == "" {
-			name = f.Properties.Name
+		// Only populated places (osm_key "place": city/town/village/hamlet).
+		// Photon also matches streets, POIs, and buildings by name (e.g. a
+		// restaurant literally named "Shahrood") which otherwise out-rank the
+		// actual city and surface their unrelated parent city/neighbourhood
+		// instead — for a weather-by-location search those are just noise.
+		if f.Properties.OsmKey != "place" {
+			continue
 		}
-		if name == "" {
+		// A place result is self-named; lang=en localizes it directly. Skip
+		// (rather than show) the rare case with no English name at all.
+		name := f.Properties.Name
+		if name == "" || !isLatinScript(name) {
 			continue
 		}
 		// OSM frequently returns several boundary variants (city point, county
@@ -122,4 +128,16 @@ func (g *Geocoder) Search(ctx context.Context, query string, limit int) ([]geoco
 		}
 	}
 	return matches, nil
+}
+
+// isLatinScript reports whether s contains only Latin letters/marks and
+// common punctuation/whitespace — used to reject a place name Photon left
+// untranslated in a local script despite lang=en (no English name tagged).
+func isLatinScript(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) && !unicode.In(r, unicode.Latin) {
+			return false
+		}
+	}
+	return true
 }
