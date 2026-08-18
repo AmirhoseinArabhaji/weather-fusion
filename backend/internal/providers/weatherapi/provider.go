@@ -4,8 +4,8 @@ package weatherapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -31,7 +31,7 @@ func New(apiKey, baseURL string, log *slog.Logger) providers.WeatherProvider {
 	return &Provider{
 		apiKey:  apiKey,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 10 * time.Second},
+		client:  providers.NewHTTPClient(),
 		log:     log.With("provider", providerName),
 	}
 }
@@ -146,7 +146,7 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		WindDir:     parsed.Current.WindDegree,
 		Visibility:  visibility,
 		UVIndex:     parsed.Current.UV,
-		IsDay:       boolPtr(parsed.Current.IsDay == 1),
+		IsDay:       providers.BoolPtr(parsed.Current.IsDay == 1),
 		Condition:   mapCondition(parsed.Current.Condition.Text),
 		Description: parsed.Current.Condition.Text,
 		RawResponse: raw,
@@ -177,34 +177,19 @@ func cityOrCoords(req models.WeatherRequest) string {
 // responses are decoded as WeatherAPI's {code,message} error envelope when
 // possible, falling back to the raw body text.
 func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	body, err := providers.HTTPGet(ctx, p.client, reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var apiErr apiError
-		if json.Unmarshal(body, &apiErr) == nil && apiErr.Message != "" {
-			return nil, fmt.Errorf("status %d: code %d: %s", resp.StatusCode, apiErr.Code, apiErr.Message)
+		var statusErr *providers.StatusError
+		if errors.As(err, &statusErr) {
+			var apiErr apiError
+			if json.Unmarshal(statusErr.Body, &apiErr) == nil && apiErr.Message != "" {
+				return nil, fmt.Errorf("status %d: code %d: %s", statusErr.Code, apiErr.Code, apiErr.Message)
+			}
 		}
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		return nil, err
 	}
-
 	return body, nil
 }
-
-func boolPtr(b bool) *bool { return &b }
 
 // mapCondition normalises WeatherAPI's free-text condition into our shared
 // WeatherCondition enum. Keyword-based since the numeric condition codes

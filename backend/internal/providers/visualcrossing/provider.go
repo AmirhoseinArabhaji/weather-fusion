@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -32,7 +31,7 @@ func New(apiKey, baseURL string, log *slog.Logger) providers.WeatherProvider {
 	return &Provider{
 		apiKey:  apiKey,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 10 * time.Second},
+		client:  providers.NewHTTPClient(),
 		log:     log.With("provider", providerName),
 	}
 }
@@ -216,27 +215,7 @@ func looksLikeCoordinates(s string) bool {
 // get performs a GET request and returns the raw response body, treating any
 // non-2xx status as an error.
 func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return body, nil
+	return providers.HTTPGet(ctx, p.client, reqURL, nil)
 }
 
 // mapCondition normalises Visual Crossing's free-text "conditions" field

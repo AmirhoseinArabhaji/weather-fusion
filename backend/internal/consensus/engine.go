@@ -20,9 +20,9 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	}
 
 	avgTemp, stdDev := temperatureStats(observations)
-	avgHumidity := averageHumidity(observations)
-	avgWind := averageWindSpeed(observations)
-	avgPrecip := averagePrecipProb(observations)
+	avgHumidity := avgField(observations, func(o *models.WeatherObservation) float64 { return float64(o.Humidity) })
+	avgWind := avgField(observations, func(o *models.WeatherObservation) float64 { return o.WindSpeed })
+	avgPrecip := avgField(observations, func(o *models.WeatherObservation) float64 { return o.PrecipProb })
 	condition := majorityCondition(observations)
 	confidence := confidenceScore(len(observations), totalProviders, stdDev)
 
@@ -75,26 +75,10 @@ func temperatureStats(obs []*models.WeatherObservation) (avg, stdDev float64) {
 	return
 }
 
-func averageHumidity(obs []*models.WeatherObservation) float64 {
+func avgField(obs []*models.WeatherObservation, get func(*models.WeatherObservation) float64) float64 {
 	var sum float64
 	for _, o := range obs {
-		sum += float64(o.Humidity)
-	}
-	return sum / float64(len(obs))
-}
-
-func averageWindSpeed(obs []*models.WeatherObservation) float64 {
-	var sum float64
-	for _, o := range obs {
-		sum += o.WindSpeed
-	}
-	return sum / float64(len(obs))
-}
-
-func averagePrecipProb(obs []*models.WeatherObservation) float64 {
-	var sum float64
-	for _, o := range obs {
-		sum += o.PrecipProb
+		sum += get(o)
 	}
 	return sum / float64(len(obs))
 }
@@ -105,15 +89,7 @@ func majorityCondition(obs []*models.WeatherObservation) models.WeatherCondition
 	for _, o := range obs {
 		counts[o.Condition]++
 	}
-	var best models.WeatherCondition
-	var max int
-	for cond, count := range counts {
-		if count > max {
-			best = cond
-			max = count
-		}
-	}
-	return best
+	return majorityOf(counts)
 }
 
 // majorityIsDay votes among providers that report a day/night signal (not

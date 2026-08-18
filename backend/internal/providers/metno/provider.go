@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -16,13 +15,10 @@ import (
 
 	"github.com/amirhosein/weather-fusion/internal/models"
 	"github.com/amirhosein/weather-fusion/internal/providers"
+	"github.com/amirhosein/weather-fusion/internal/providers/geocode"
 )
 
 const providerName = "met.no"
-
-// geocodeURL resolves a city name to coordinates — Locationforecast only
-// accepts lat/lon, same gap and same fix as the open-meteo provider.
-const geocodeURL = "https://geocoding-api.open-meteo.com/v1/search"
 
 // Provider is the MET Norway implementation of providers.WeatherProvider.
 // Uses the "compact" Locationforecast variant (no separate daily/hourly
@@ -43,7 +39,7 @@ func New(apiKey, baseURL, userAgent string, log *slog.Logger) providers.WeatherP
 	return &Provider{
 		baseURL:   baseURL,
 		userAgent: userAgent,
-		client:    &http.Client{Timeout: 10 * time.Second},
+		client:    providers.NewHTTPClient(),
 		log:       log.With("provider", providerName),
 	}
 }
@@ -307,33 +303,10 @@ func (p *Provider) resolveLocation(ctx context.Context, req models.WeatherReques
 		return 0, 0, "", fmt.Errorf("city or lat/lon required")
 	}
 
-	params := url.Values{}
-	params.Set("name", req.City)
-	params.Set("count", "1")
-	params.Set("language", "en")
-	params.Set("format", "json")
-	geoReqURL := fmt.Sprintf("%s?%s", geocodeURL, params.Encode())
-
-	body, err := p.get(ctx, geoReqURL)
+	r, err := geocode.Resolve(ctx, p.client, req.City)
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("geocode %q: %w", req.City, err)
+		return 0, 0, "", err
 	}
-
-	var parsed struct {
-		Results []struct {
-			Name string  `json:"name"`
-			Lat  float64 `json:"latitude"`
-			Lon  float64 `json:"longitude"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return 0, 0, "", fmt.Errorf("decode geocode response: %w", err)
-	}
-	if len(parsed.Results) == 0 {
-		return 0, 0, "", fmt.Errorf("city not found: %s", req.City)
-	}
-
-	r := parsed.Results[0]
 	return r.Lat, r.Lon, r.Name, nil
 }
 
@@ -348,28 +321,7 @@ func (p *Provider) buildURL(lat, lon float64) string {
 // non-2xx status as an error. A custom User-Agent is mandatory — MET Norway
 // returns 403 without one.
 func (p *Provider) get(ctx context.Context, reqURL string) ([]byte, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	httpReq.Header.Set("User-Agent", p.userAgent)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return body, nil
+	return providers.HTTPGet(ctx, p.client, reqURL, map[string]string{"User-Agent": p.userAgent})
 }
 
 // mapSymbolCode normalises MET Norway's symbol_code (e.g. "clearsky_day",
@@ -410,15 +362,13 @@ func mapSymbolCode(code string) models.WeatherCondition {
 func symbolIsDay(code string) *bool {
 	switch {
 	case strings.HasSuffix(code, "_day"), strings.HasSuffix(code, "_polartwilight"):
-		return boolPtr(true)
+		return providers.BoolPtr(true)
 	case strings.HasSuffix(code, "_night"):
-		return boolPtr(false)
+		return providers.BoolPtr(false)
 	default:
 		return nil
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }
 
 // describeSymbolCode turns a symbol_code into a short human-readable label
 // by dropping the _day/_night/_polartwilight suffix and underscores.
