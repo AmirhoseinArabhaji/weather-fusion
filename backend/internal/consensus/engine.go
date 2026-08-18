@@ -41,12 +41,18 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	}
 }
 
-// bestLocation prefers the first observation with a non-empty city name.
-// Providers race concurrently, so observations[0] isn't a fixed provider —
-// and not all of them reverse-geocode lat/lon input (e.g. Visual Crossing
-// doesn't), so blindly taking observations[0].Location risked an empty city
-// whenever an unnamed one happened to land first.
+// bestLocation prefers the first observation with both a city name and a
+// timezone; falls back to city-only, then whatever landed first. Providers
+// race concurrently, so observations[0] isn't a fixed provider, and not
+// every provider reverse-geocodes (city) or reports an IANA timezone —
+// picking whichever happened to answer first risked losing either field
+// even when another provider in the same batch had it.
 func bestLocation(obs []*models.WeatherObservation) models.Location {
+	for _, o := range obs {
+		if o.Location.City != "" && o.Location.Timezone != "" {
+			return o.Location
+		}
+	}
 	for _, o := range obs {
 		if o.Location.City != "" {
 			return o.Location
