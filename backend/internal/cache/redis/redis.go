@@ -66,6 +66,19 @@ func (c *client) FlushAll(ctx context.Context) error {
 	return c.rdb.FlushAll(ctx).Err()
 }
 
+func (c *client) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	var incr *goredis.IntCmd
+	_, err := c.rdb.Pipelined(ctx, func(pipe goredis.Pipeliner) error {
+		incr = pipe.Incr(ctx, key)
+		pipe.ExpireNX(ctx, key, ttl)
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return incr.Val(), nil
+}
+
 func (c *client) Close() error {
 	return c.rdb.Close()
 }

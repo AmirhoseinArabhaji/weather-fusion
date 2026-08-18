@@ -1,14 +1,19 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/amirhosein/weather-fusion/internal/cache"
+	"github.com/amirhosein/weather-fusion/internal/config"
 	"github.com/amirhosein/weather-fusion/internal/consensus"
 	"github.com/amirhosein/weather-fusion/internal/llm"
 	"github.com/amirhosein/weather-fusion/internal/middleware"
@@ -21,12 +26,14 @@ import (
 type WeatherHandler struct {
 	providers []providers.WeatherProvider
 	llm       llm.LLMService
+	cache     cache.Cache
+	cfg       *config.Config
 	log       *slog.Logger
 }
 
 // NewWeatherHandler creates a WeatherHandler.
-func NewWeatherHandler(provs []providers.WeatherProvider, llmService llm.LLMService, log *slog.Logger) *WeatherHandler {
-	return &WeatherHandler{providers: provs, llm: llmService, log: log.With("handler", "weather")}
+func NewWeatherHandler(provs []providers.WeatherProvider, llmService llm.LLMService, cacheClient cache.Cache, cfg *config.Config, log *slog.Logger) *WeatherHandler {
+	return &WeatherHandler{providers: provs, llm: llmService, cache: cacheClient, cfg: cfg, log: log.With("handler", "weather")}
 }
 
 // providerEvent is the payload sent for each "provider" SSE event.
@@ -61,6 +68,19 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	key := cacheKey("current", req)
+
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	if h.tryServeFromCache(c, key) {
+		return
+	}
+	if !h.checkRateLimit(c) {
+		return
+	}
+
 	events := make(chan providerEvent, len(h.providers))
 
 	var wg sync.WaitGroup
@@ -82,9 +102,13 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 		close(events)
 	}()
 
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	var recorded []cachedSSEEvent
+	emit := func(name string, payload interface{}) {
+		if b, err := json.Marshal(payload); err == nil {
+			recorded = append(recorded, cachedSSEEvent{Event: name, Data: b})
+		}
+		c.SSEvent(name, payload)
+	}
 
 	var observations []*models.WeatherObservation
 	clientGone := c.Stream(func(w io.Writer) bool {
@@ -95,7 +119,7 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 		if ev.Data != nil {
 			observations = append(observations, ev.Data)
 		}
-		c.SSEvent("provider", ev)
+		emit("provider", ev)
 		return true
 	})
 
@@ -104,13 +128,13 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	}
 
 	if len(observations) == 0 {
-		c.SSEvent("error", gin.H{"code": "NO_DATA", "message": "no providers returned data"})
+		emit("error", gin.H{"code": "NO_DATA", "message": "no providers returned data"})
 		c.Writer.Flush()
 		return
 	}
 
 	result := consensus.Merge(observations, len(h.providers))
-	c.SSEvent("consensus", result)
+	emit("consensus", result)
 	c.Writer.Flush()
 
 	// Sent separately from "consensus" so the numeric data isn't held up
@@ -133,8 +157,17 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	} else {
 		summaryPayload["error"] = "llm unavailable"
 	}
-	c.SSEvent("summary", summaryPayload)
+	emit("summary", summaryPayload)
 	c.Writer.Flush()
+
+	// Detached from the request context: the client may have already
+	// disconnected by now (a fresh request for the same location can cancel
+	// this one), but the write is still worth completing for the next caller.
+	setCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.cache.Set(setCtx, key, recorded, h.cfg.CacheTTL); err != nil {
+		h.log.WarnContext(ctx, "failed to cache weather response", "error", err)
+	}
 }
 
 // dailyProviderEvent is the payload sent for each "provider_daily" SSE event.
@@ -177,6 +210,19 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	key := cacheKey("forecast", req)
+
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	if h.tryServeFromCache(c, key) {
+		return
+	}
+	if !h.checkRateLimit(c) {
+		return
+	}
+
 	dailyEvents := make(chan dailyProviderEvent, len(h.providers))
 	hourlyEvents := make(chan hourlyProviderEvent, len(h.providers))
 
@@ -210,9 +256,13 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 		close(hourlyEvents)
 	}()
 
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	var recorded []cachedSSEEvent
+	emit := func(name string, payload interface{}) {
+		if b, err := json.Marshal(payload); err == nil {
+			recorded = append(recorded, cachedSSEEvent{Event: name, Data: b})
+		}
+		c.SSEvent(name, payload)
+	}
 
 	var dailyForecasts []*models.ProviderForecast
 	var hourlyForecasts []*models.ProviderHourlyForecast
@@ -228,7 +278,7 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 				if ev.Data != nil {
 					dailyForecasts = append(dailyForecasts, ev.Data)
 				}
-				c.SSEvent("provider_daily", ev)
+				emit("provider_daily", ev)
 			}
 		case ev, ok := <-hourlyEvents:
 			if !ok {
@@ -238,7 +288,7 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 				if ev.Data != nil {
 					hourlyForecasts = append(hourlyForecasts, ev.Data)
 				}
-				c.SSEvent("provider_hourly", ev)
+				emit("provider_hourly", ev)
 			}
 		}
 		return !(dailyDone && hourlyDone)
@@ -249,16 +299,22 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 	}
 
 	if len(dailyForecasts) > 0 {
-		c.SSEvent("daily", consensus.MergeDaily(dailyForecasts))
+		emit("daily", consensus.MergeDaily(dailyForecasts))
 	} else {
-		c.SSEvent("daily", gin.H{"error": "no providers returned daily data"})
+		emit("daily", gin.H{"error": "no providers returned daily data"})
 	}
 	c.Writer.Flush()
 
 	if len(hourlyForecasts) > 0 {
-		c.SSEvent("hourly", consensus.MergeHourly(hourlyForecasts))
+		emit("hourly", consensus.MergeHourly(hourlyForecasts))
 	} else {
-		c.SSEvent("hourly", gin.H{"error": "no providers returned hourly data"})
+		emit("hourly", gin.H{"error": "no providers returned hourly data"})
 	}
 	c.Writer.Flush()
+
+	setCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.cache.Set(setCtx, key, recorded, h.cfg.CacheTTL); err != nil {
+		h.log.WarnContext(ctx, "failed to cache weather response", "error", err)
+	}
 }

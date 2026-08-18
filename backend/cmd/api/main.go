@@ -64,7 +64,7 @@ func Run() {
 	weatherProviders := buildProviders(cfg, log)
 	llmClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiMaxTokens, log)
 	geocoder := photon.New(log)
-	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient, geocoder)
+	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient, geocoder, cache)
 
 	// Configure HTTP server
 	srv := &http.Server{

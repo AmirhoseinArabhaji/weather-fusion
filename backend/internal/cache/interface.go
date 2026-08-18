@@ -25,6 +25,11 @@ type Cache interface {
 	// FlushAll removes all keys (use with care — mainly for testing).
 	FlushAll(ctx context.Context) error
 
+	// Incr atomically increments the counter at key and returns its new value.
+	// ttl is applied only when the key is first created (EXPIRE NX), so it
+	// isn't pushed out by later increments within the same window.
+	Incr(ctx context.Context, key string, ttl time.Duration) (int64, error)
+
 	// Close releases the underlying connection.
 	Close() error
 }
