@@ -16,6 +16,9 @@ export interface LocationAutocompleteProps {
   onSelect: (match: LocationMatch) => void;
   /** Enter with no suggestion highlighted — just the typed text, backend resolves it. */
   onSubmitFreeText: (text: string) => void;
+  /** Floor on the input's width — the default (250) is what pushes nav controls
+   * off-screen on a narrow viewport, so callers on small screens pass 0. */
+  minWidth?: number;
 }
 
 const DOT = 'oklch(0.68 0.16 235)';
@@ -36,6 +39,7 @@ export default function LocationAutocomplete({
   loading,
   onSelect,
   onSubmitFreeText,
+  minWidth = 250,
 }: LocationAutocompleteProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -111,7 +115,7 @@ export default function LocationAutocomplete({
           border: `1px solid ${hasError ? ERROR_DOT : t.border}`,
           borderRadius: 12,
           padding: '9px 10px 9px 15px',
-          minWidth: 250,
+          minWidth,
         }}
       >
         <div

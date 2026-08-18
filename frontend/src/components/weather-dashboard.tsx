@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
@@ -195,6 +195,17 @@ export default function WeatherDashboard() {
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
 
+  // Desktop layout is untouched below — isMobile only swaps in narrower
+  // values at the handful of spots that actually get cramped on a phone.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
   // Manually-entered locations have no coordinates (no client-side geocoding) —
   // send the city name instead and let the backend resolve it, same as every
   // other city-name query.
@@ -351,7 +362,7 @@ export default function WeatherDashboard() {
       {/* Ambient field */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 620, pointerEvents: 'none', background: t.ambient }} />
 
-      <div style={{ position: 'relative', maxWidth: 1480, margin: '0 auto', padding: '26px 40px 72px' }}>
+      <div style={{ position: 'relative', maxWidth: 1480, margin: '0 auto', padding: isMobile ? '18px 16px 40px' : '26px 40px 72px' }}>
         {/* Nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, marginBottom: 22, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
@@ -379,26 +390,29 @@ export default function WeatherDashboard() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: isMobile ? 'wrap' : 'nowrap', width: isMobile ? '100%' : undefined }}>
             {/* Always editable — GPS/IP resolution runs in the background (see
                 useLocation) and fills this in once it lands, but typing here
                 and hitting Enter overrides it immediately, whether that
                 resolution is still pending, still running, or already failed. */}
-            <LocationAutocomplete
-              t={t}
-              dark={dark}
-              hasError={!!locationError}
-              loading={locationLoading}
-              placeholder={
-                locationError
-                  ? 'Location lookup failed — enter a city'
-                  : location
-                    ? location.city || 'Current location — or enter a city'
-                    : 'Resolving location… or enter a city'
-              }
-              onSelect={(match) => setManualLocation(match.name, { lat: match.lat, lon: match.lon })}
-              onSubmitFreeText={(text) => setManualLocation(text)}
-            />
+            <div style={{ flex: isMobile ? '1 1 100%' : undefined }}>
+              <LocationAutocomplete
+                t={t}
+                dark={dark}
+                hasError={!!locationError}
+                loading={locationLoading}
+                minWidth={isMobile ? 0 : 250}
+                placeholder={
+                  locationError
+                    ? 'Location lookup failed — enter a city'
+                    : location
+                      ? location.city || 'Current location — or enter a city'
+                      : 'Resolving location… or enter a city'
+                }
+                onSelect={(match) => setManualLocation(match.name, { lat: match.lat, lon: match.lon })}
+                onSubmitFreeText={(text) => setManualLocation(text)}
+              />
+            </div>
             <div style={{ display: 'flex', background: t.glass, border: `1px solid ${t.border}`, borderRadius: 12, padding: 3, gap: 2 }}>
               <button onClick={() => setUnits('C')} style={toggleBtn(units === 'C', true)}>
                 °C
@@ -420,6 +434,7 @@ export default function WeatherDashboard() {
 
         {/* Provider stream rail */}
         <div
+          className={isMobile ? 'wf-hide-scrollbar' : undefined}
           style={{
             background: t.glass,
             border: `1px solid ${t.border}`,
@@ -429,9 +444,14 @@ export default function WeatherDashboard() {
             display: 'flex',
             alignItems: 'center',
             gap: 18,
-            flexWrap: 'wrap',
+            flexWrap: isMobile ? 'nowrap' : 'wrap',
+            overflowX: isMobile ? 'auto' : 'hidden',
             position: 'relative',
-            overflow: 'hidden',
+            overflowY: 'hidden',
+            // native scrollbar reserves space along the bottom edge on mobile,
+            // which visually un-centers the row against the box's full height
+            scrollbarWidth: isMobile ? 'none' : undefined,
+            msOverflowStyle: isMobile ? 'none' : undefined,
           }}
         >
           <div
@@ -445,13 +465,13 @@ export default function WeatherDashboard() {
               animation: sweepAnimation,
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, whiteSpace: 'nowrap' }}>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.text3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: t.text3, lineHeight: 1 }}>
               {gatheringLabel}
             </span>
-            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: t.text2 }}>{loadedCountLabel}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: t.text2, lineHeight: 1 }}>{loadedCountLabel}</span>
           </div>
-          <div style={{ width: 1, height: 18, background: t.border }} />
+          <div style={{ width: 1, height: 18, background: t.border, flexShrink: 0 }} />
           {providerStatuses.map((ps) => (
             <div
               key={ps.name}
@@ -464,22 +484,24 @@ export default function WeatherDashboard() {
                 borderRadius: 20,
                 padding: '5px 12px 5px 10px',
                 transition: 'all 0.3s',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: ps.dotColor, boxShadow: ps.dotGlow }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: t.text2 }}>{ps.name}</span>
-              <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.05em', color: ps.labelColor }}>{ps.label}</span>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: ps.dotColor, boxShadow: ps.dotGlow, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: t.text2, lineHeight: 1 }}>{ps.name}</span>
+              <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.05em', color: ps.labelColor, lineHeight: 1 }}>{ps.label}</span>
             </div>
           ))}
         </div>
 
         {/* Hero */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 18, marginBottom: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: 18, marginBottom: 18 }}>
           <div
             style={{
               position: 'relative',
               borderRadius: 24,
-              padding: '34px 36px',
+              padding: isMobile ? '24px 22px' : '34px 36px',
               overflow: 'hidden',
               background: t.heroBg,
               border: `1px solid ${t.heroBorder}`,
@@ -502,10 +524,10 @@ export default function WeatherDashboard() {
                 Consensus forecast
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ fontSize: 104, fontWeight: 600, lineHeight: 0.9, letterSpacing: '-0.045em', color: t.heroText }}>
+                <div style={{ fontSize: isMobile ? 60 : 104, fontWeight: 600, lineHeight: 0.9, letterSpacing: '-0.045em', color: t.heroText }}>
                   {consensusTempDisplay}
                 </div>
-                <div style={{ fontSize: 30, fontWeight: 500, color: t.heroLabel, marginTop: 8 }}>{unitSymbol}</div>
+                <div style={{ fontSize: isMobile ? 20 : 30, fontWeight: 500, color: t.heroLabel, marginTop: 8 }}>{unitSymbol}</div>
               </div>
               <div style={{ fontSize: 15, color: t.heroSub, marginTop: 14 }}>
                 {consensusCondition} · feels like {consensusFeelsDisplay}
@@ -549,7 +571,7 @@ export default function WeatherDashboard() {
               background: t.glass,
               border: `1px solid ${t.border}`,
               borderRadius: 24,
-              padding: '30px 34px',
+              padding: isMobile ? '22px 20px' : '30px 34px',
               display: 'flex',
               flexDirection: 'column',
               position: 'relative',
@@ -677,7 +699,16 @@ export default function WeatherDashboard() {
         </div>
 
         {/* Daily */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(daily.length, 1)}, 1fr)`, gap: 14, marginBottom: 18 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? `repeat(${Math.max(daily.length, 1)}, 150px)` : `repeat(${Math.max(daily.length, 1)}, 1fr)`,
+            gridAutoFlow: isMobile ? 'column' : undefined,
+            overflowX: isMobile ? 'auto' : undefined,
+            gap: 14,
+            marginBottom: 18,
+          }}
+        >
           {daily.map((d, i) => (
             <div
               key={`${d.dayLabel}-${i}`}
@@ -710,8 +741,8 @@ export default function WeatherDashboard() {
 
         {/* Provider detail */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }}>
-          <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: '26px 30px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ background: t.glass, border: `1px solid ${t.border}`, borderRadius: 22, padding: isMobile ? '20px 16px' : '26px 30px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 6 }}>
               <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em' }}>Provider signals</div>
               <div style={{ fontFamily: MONO, fontSize: 10.5, color: rainConfidence.strong }}>{rainDisagreementNote}</div>
             </div>
@@ -720,16 +751,16 @@ export default function WeatherDashboard() {
                 key={p.name}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '150px 62px 1fr 54px',
+                  gridTemplateColumns: isMobile ? '92px 40px 1fr 36px' : '150px 62px 1fr 54px',
                   alignItems: 'center',
-                  gap: 16,
+                  gap: isMobile ? 10 : 16,
                   padding: '11px 0',
                   borderBottom: `1px solid ${t.borderSoft}`,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, boxShadow: `0 0 9px ${p.color}` }} />
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text2 }}>{p.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, boxShadow: `0 0 9px ${p.color}`, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: t.text }}>{p.tempDisplay}</div>
                 <div style={{ height: 6, background: t.trackBg, borderRadius: 4, overflow: 'hidden' }}>
