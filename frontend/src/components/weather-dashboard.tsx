@@ -5,6 +5,7 @@ import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
 import LocationAutocomplete from './location-autocomplete';
+import { Toast } from './toast';
 import {
   PROVIDER_PALETTE,
   formatHourLabel,
@@ -34,6 +35,7 @@ export default function WeatherDashboard() {
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
   const [rateLimitNoticeDismissed, setRateLimitNoticeDismissed] = useState(false);
+  const [rateLimitToastVisible, setRateLimitToastVisible] = useState(false);
 
   // Desktop layout is untouched below — isMobile only swaps in narrower
   // values at the handful of spots that actually get cramped on a phone.
@@ -65,6 +67,12 @@ export default function WeatherDashboard() {
 
   const stream = useWeatherStream(locationParams);
   const forecast = useForecastStream(locationParams ? { ...locationParams, days: 5 } : null);
+
+  useEffect(() => {
+    if (stream.rateLimited || forecast.rateLimited) {
+      setRateLimitToastVisible(true);
+    }
+  }, [stream.rateLimited, forecast.rateLimited]);
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
@@ -298,6 +306,26 @@ export default function WeatherDashboard() {
             </div>
           </div>
         </div>
+
+        {stream.status === 'error' && !stream.consensus && !stream.rateLimited && (
+          <div
+            style={{
+              background: dark ? 'oklch(0.28 0.08 25)' : 'oklch(0.97 0.035 30)',
+              border: `1px solid ${dark ? 'oklch(0.5 0.13 25)' : 'oklch(0.85 0.08 30)'}`,
+              borderRadius: 16,
+              padding: '13px 16px',
+              marginBottom: 18,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+            <span style={{ fontSize: 13, color: dark ? 'oklch(0.92 0.05 30)' : 'oklch(0.4 0.13 28)', lineHeight: 1.4, flex: 1 }}>
+              Can&apos;t reach the weather service right now. Please try again shortly.
+            </span>
+          </div>
+        )}
 
         {!rateLimitNoticeDismissed && (
           <div
@@ -591,6 +619,11 @@ export default function WeatherDashboard() {
               </div>
             </div>
           </div>
+          {(forecast.hourlyError || forecast.error) && hourly.length === 0 && (
+            <div style={{ fontFamily: MONO, fontSize: 12.5, color: t.text3, padding: '18px 0' }}>
+              {forecast.hourlyError ?? forecast.error}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 230, marginTop: 22, overflowX: 'auto', paddingBottom: 4 }}>
             {hourly.map((h, i) => (
               <div
@@ -630,6 +663,11 @@ export default function WeatherDashboard() {
         </div>
 
         {/* Daily */}
+        {(forecast.dailyError || forecast.error) && daily.length === 0 && (
+          <div style={{ fontFamily: MONO, fontSize: 12.5, color: t.text3, padding: '10px 0 18px' }}>
+            {forecast.dailyError ?? forecast.error}
+          </div>
+        )}
         <div
           style={{
             display: 'grid',
@@ -713,6 +751,14 @@ export default function WeatherDashboard() {
           © {new Date().getFullYear()} Amirhosein Arabhaji. All rights reserved.
         </div>
       </div>
+
+      {rateLimitToastVisible && (
+        <Toast
+          dark={dark}
+          message="You've checked a lot of new locations recently. please slow down and try again shortly."
+          onDone={() => setRateLimitToastVisible(false)}
+        />
+      )}
     </div>
   );
 }
