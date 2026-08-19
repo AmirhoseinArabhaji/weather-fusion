@@ -37,6 +37,7 @@ services:
       - wf-net
 
   backend:
+    image: ghcr.io/amirhoseinarabhaji/weather-fusion-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -64,6 +65,7 @@ services:
       - wf-net
 
   frontend:
+    image: ghcr.io/amirhoseinarabhaji/weather-fusion-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
