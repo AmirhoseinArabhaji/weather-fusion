@@ -71,10 +71,6 @@ services:
       dockerfile: Dockerfile
     container_name: wf-frontend
     restart: unless-stopped
-    env_file:
-      - ./frontend/.env.local
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8080
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
