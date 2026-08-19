@@ -233,20 +233,27 @@ export default function WeatherDashboard() {
               height={34}
               style={{ width: 50, height: 50, borderRadius: '50%', boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)' }}
             />
-            <div style={{ fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em' }}>Weather Fusion</div>
-            <div
-              style={{
-                fontFamily: MONO,
-                fontSize: 10.5,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                color: t.text3,
-                border: `1px solid ${t.border}`,
-                borderRadius: 20,
-                padding: '4px 11px',
-              }}
-            >
-              Weather Intelligence
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em' }}>Weather Fusion</div>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
+                    color: t.text3,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 20,
+                    padding: '4px 11px',
+                  }}
+                >
+                  Weather Intelligence
+                </div>
+              </div>
+              <div style={{ fontSize: 13, color: t.text3, marginTop: 3 }}>
+                Consensus from multiple providers, explained by AI
+              </div>
             </div>
           </div>
 
