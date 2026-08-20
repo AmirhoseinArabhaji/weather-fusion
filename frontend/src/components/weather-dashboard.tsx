@@ -104,6 +104,17 @@ export default function WeatherDashboard() {
 
   // Real providers, in arrival order — count and identity come from whatever
   // the backend actually has configured, not a fixed list.
+  // Current-weather precip_prob is mostly unpopulated (openweather/weatherapi/
+  // open-meteo don't expose it on their current endpoints, weatherbit/visualcrossing
+  // report ~0 for current by design — see backend CLAUDE.md). Today's daily forecast
+  // entry is the one place every provider actually reports a real probability.
+  const todaysRainByProvider = new Map<string, number>();
+  for (const ev of forecast.dailyEvents) {
+    if (ev.status === 'ok' && ev.data && ev.data.days.length > 0) {
+      todaysRainByProvider.set(ev.provider, Math.round(ev.data.days[0].precip_prob * 100));
+    }
+  }
+
   const rawProviders = stream.providerEvents
     .filter((ev) => ev.status === 'ok' && ev.data)
     .map((ev, i) => {
@@ -114,7 +125,7 @@ export default function WeatherDashboard() {
         tempC: data.temperature,
         feelsC: data.feels_like,
         condition: data.description || data.condition,
-        rainPct: Math.round(data.precip_prob * 100),
+        rainPct: todaysRainByProvider.get(ev.provider) ?? Math.round(data.precip_prob * 100),
       };
     });
 
