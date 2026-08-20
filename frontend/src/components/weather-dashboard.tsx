@@ -123,6 +123,7 @@ export default function WeatherDashboard() {
         tempC: data.temperature,
         feelsC: data.feels_like,
         condition: data.description || data.condition,
+        humidity: data.humidity,
         rainPct: todaysRainByProvider.get(ev.provider) ?? Math.round(data.precip_prob * 100),
       };
     });
@@ -195,6 +196,7 @@ export default function WeatherDashboard() {
   const unitSymbol = units === 'F' ? '°F' : '°C';
   const consensusFeelsDisplay = providers.length > 0 ? display(mean(providers.map((p) => p.feelsC))) : '—';
   const consensusCondition = stream.consensus ? capitalize(stream.consensus.condition) : 'Gathering conditions…';
+  const consensusHumidityDisplay = stream.consensus ? `${Math.round(stream.consensus.humidity)}%` : '—';
   const consensusIconSet = CONDITION_ICON[stream.consensus?.condition ?? 'unknown'];
   const ConsensusConditionIcon = (stream.consensus?.is_day ?? true) ? consensusIconSet.day : consensusIconSet.night;
   const localTimeDisplay = (() => {
@@ -495,7 +497,7 @@ export default function WeatherDashboard() {
                 </div>
               </div>
               <div style={{ fontSize: 15, color: t.heroSub, marginTop: 14 }}>
-                {consensusCondition} · feels like {consensusFeelsDisplay}
+                {consensusCondition} · feels like {consensusFeelsDisplay} · humidity {consensusHumidityDisplay}
               </div>
 
               <div style={{ display: 'flex', gap: 11, marginTop: 26 }}>
@@ -740,7 +742,10 @@ export default function WeatherDashboard() {
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color, boxShadow: `0 0 9px ${p.color}`, flexShrink: 0 }} />
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text2, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
                 </div>
-                <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: t.text }}>{p.tempDisplay}</div>
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: t.text }}>{p.tempDisplay}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: t.text3 }}>{p.humidity}% hum</div>
+                </div>
                 <div style={{ height: 6, background: t.trackBg, borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{ height: '100%', background: p.color, borderRadius: 4, width: `${p.rainPct}%`, boxShadow: `0 0 10px ${p.color}` }} />
                 </div>
