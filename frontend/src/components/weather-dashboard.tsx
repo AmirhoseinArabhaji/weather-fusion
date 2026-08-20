@@ -104,10 +104,8 @@ export default function WeatherDashboard() {
 
   // Real providers, in arrival order — count and identity come from whatever
   // the backend actually has configured, not a fixed list.
-  // Current-weather precip_prob is mostly unpopulated (openweather/weatherapi/
-  // open-meteo don't expose it on their current endpoints, weatherbit/visualcrossing
-  // report ~0 for current by design — see backend CLAUDE.md). Today's daily forecast
-  // entry is the one place every provider actually reports a real probability.
+  // Current-weather precip_prob is mostly unpopulated across providers — use
+  // today's daily forecast entry instead, which every provider fills in for real.
   const todaysRainByProvider = new Map<string, number>();
   for (const ev of forecast.dailyEvents) {
     if (ev.status === 'ok' && ev.data && ev.data.days.length > 0) {
@@ -158,11 +156,8 @@ export default function WeatherDashboard() {
   const tempConfidence = confidenceFor(tempStd, 0.8, 1.5, dark);
   const rainConfidence = confidenceFor(rainStd, 12, 22, dark);
 
-  // Bar container height scales with the hour's actual average temperature.
-  // Provider disagreement (temp_max - temp_min) is shown as a separate ±X°
-  // label rather than folded into the fill height — an hour has one real
-  // reading, so overloading bar/fill geometry with a second variable (spread)
-  // on top of temp + rain color made none of the three easy to read at a glance.
+  // Bar height = hour's average temp; provider spread shown as a separate
+  // ±X° label rather than folded into the fill (an hour has one real reading).
   const hourlyRaw = (forecast.hourly ?? []).slice(0, 24);
   const hGlobalHigh = hourlyRaw.length > 0 ? Math.max(...hourlyRaw.map((h) => h.temperature)) : 0;
   const hGlobalLow = hourlyRaw.length > 0 ? Math.min(...hourlyRaw.map((h) => h.temperature)) : 0;
