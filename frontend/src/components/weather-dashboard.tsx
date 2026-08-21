@@ -128,7 +128,12 @@ export default function WeatherDashboard() {
       };
     });
 
-  const rainMean = rawProviders.length > 0 ? mean(rawProviders.map((p) => p.rainPct)) : 0;
+  // met.no has no real precip-probability field — it reports a binary 0/100
+  // ("any amount forecast") instead of a graduated chance, so it's excluded
+  // from rain mean/stddev/confidence to avoid skewing agreement stats against
+  // providers reporting genuine partial probabilities.
+  const gradedRainProviders = rawProviders.filter((p) => p.name !== 'met.no');
+  const rainMean = gradedRainProviders.length > 0 ? mean(gradedRainProviders.map((p) => p.rainPct)) : 0;
   const outlierColor = dark ? 'oklch(0.78 0.16 28)' : 'oklch(0.54 0.16 28)';
   const providers = rawProviders.map((p) => ({
     ...p,
@@ -150,7 +155,7 @@ export default function WeatherDashboard() {
   const sweepAnimation = allSettled ? 'none' : 'sweep 2.2s linear infinite';
 
   const temps = providers.map((p) => p.tempC);
-  const rains = providers.map((p) => p.rainPct);
+  const rains = providers.filter((p) => p.name !== 'met.no').map((p) => p.rainPct);
   const tempStd = temps.length > 0 ? stddev(temps) : 0;
   const rainStd = rains.length > 0 ? stddev(rains) : 0;
 
