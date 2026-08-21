@@ -68,7 +68,9 @@ func MergeDaily(forecasts []*models.ProviderForecast) []models.DailyForecast {
 			b.tempMaxs = append(b.tempMaxs, d.TempMax)
 			b.humidities = append(b.humidities, float64(d.Humidity))
 			b.winds = append(b.winds, d.WindSpeed)
-			b.precips = append(b.precips, d.PrecipProb)
+			if f.Provider != excludedPrecipProvider {
+				b.precips = append(b.precips, d.PrecipProb)
+			}
 			b.conditions[d.Condition]++
 			if _, seen := b.descByCond[d.Condition]; !seen {
 				b.descByCond[d.Condition] = d.Description
@@ -141,7 +143,9 @@ func MergeHourly(forecasts []*models.ProviderHourlyForecast) []models.ConsensusH
 				order = append(order, key)
 			}
 			b.temps = append(b.temps, h.Temperature)
-			b.precips = append(b.precips, h.PrecipProb)
+			if f.Provider != excludedPrecipProvider {
+				b.precips = append(b.precips, h.PrecipProb)
+			}
 			b.conditions[h.Condition]++
 		}
 	}

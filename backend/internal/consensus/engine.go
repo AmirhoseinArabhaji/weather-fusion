@@ -22,7 +22,7 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	avgTemp, stdDev := temperatureStats(observations)
 	avgHumidity := avgField(observations, func(o *models.WeatherObservation) float64 { return float64(o.Humidity) })
 	avgWind := avgField(observations, func(o *models.WeatherObservation) float64 { return o.WindSpeed })
-	avgPrecip := avgField(observations, func(o *models.WeatherObservation) float64 { return o.PrecipProb })
+	avgPrecip := avgPrecipProb(observations)
 	condition := majorityCondition(observations)
 	confidence := confidenceScore(len(observations), totalProviders, stdDev)
 
@@ -82,6 +82,31 @@ func avgField(obs []*models.WeatherObservation, get func(*models.WeatherObservat
 	}
 	return sum / float64(len(obs))
 }
+
+// avgPrecipProb averages PrecipProb across providers, excluding met.no: unlike
+// every other provider's graduated 0-1 forecast probability, met.no has no real
+// probability field and reports a binary 0/1 ("any precip amount forecast"),
+// which skews the average and inflates spread against genuinely graduated readings.
+func avgPrecipProb(obs []*models.WeatherObservation) float64 {
+	var sum float64
+	var n int
+	for _, o := range obs {
+		if o.Provider == excludedPrecipProvider {
+			continue
+		}
+		sum += o.PrecipProb
+		n++
+	}
+	if n == 0 {
+		return 0
+	}
+	return sum / float64(n)
+}
+
+// excludedPrecipProvider is the provider whose PrecipProb is a binary
+// heuristic (0/1), not a real graduated probability, and so is excluded
+// from precip-probability averaging/spread calculations everywhere.
+const excludedPrecipProvider = "met.no"
 
 // majorityCondition picks the most frequently reported condition across providers.
 func majorityCondition(obs []*models.WeatherObservation) models.WeatherCondition {
