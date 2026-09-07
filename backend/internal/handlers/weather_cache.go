@@ -22,7 +22,7 @@ func cacheKey(kind string, req models.WeatherRequest) string {
 	if units == "" {
 		units = "metric"
 	}
-	sig := fmt.Sprintf("geo:%.2f,%.2f", req.Lat, req.Lon)
+	sig := fmt.Sprintf("geo:%.2f,%.2f", req.LatVal(), req.LonVal())
 	if req.City != "" {
 		sig = "city:" + strings.ToLower(strings.TrimSpace(req.City))
 	}

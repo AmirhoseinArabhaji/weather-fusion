@@ -113,8 +113,8 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 // resolveLocation returns coordinates for the request, geocoding the city
 // name first if lat/lon weren't provided directly.
 func (p *Provider) resolveLocation(ctx context.Context, req models.WeatherRequest) (lat, lon float64, city, country string, err error) {
-	if req.Lat != 0 || req.Lon != 0 {
-		return req.Lat, req.Lon, req.City, "", nil
+	if req.HasCoordinates() {
+		return req.LatVal(), req.LonVal(), req.City, "", nil
 	}
 	if req.City == "" {
 		return 0, 0, "", "", fmt.Errorf("city or lat/lon required")

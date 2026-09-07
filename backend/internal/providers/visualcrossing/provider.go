@@ -165,7 +165,7 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 func (p *Provider) buildURL(req models.WeatherRequest, include string) string {
 	location := req.City
 	if location == "" {
-		location = fmt.Sprintf("%f,%f", req.Lat, req.Lon)
+		location = fmt.Sprintf("%f,%f", req.LatVal(), req.LonVal())
 	}
 
 	unitGroup := "metric"

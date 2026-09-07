@@ -130,8 +130,8 @@ func (p *Provider) buildCurrentURL(req models.WeatherRequest) string {
 	if req.City != "" {
 		params.Set("q", req.City)
 	} else {
-		params.Set("lat", fmt.Sprintf("%f", req.Lat))
-		params.Set("lon", fmt.Sprintf("%f", req.Lon))
+		params.Set("lat", fmt.Sprintf("%f", req.LatVal()))
+		params.Set("lon", fmt.Sprintf("%f", req.LonVal()))
 	}
 	return fmt.Sprintf("%s/weather?%s", p.baseURL, params.Encode())
 }
@@ -253,8 +253,8 @@ func (p *Provider) buildForecastURL(req models.WeatherRequest, cnt int) string {
 	if req.City != "" {
 		params.Set("q", req.City)
 	} else {
-		params.Set("lat", fmt.Sprintf("%f", req.Lat))
-		params.Set("lon", fmt.Sprintf("%f", req.Lon))
+		params.Set("lat", fmt.Sprintf("%f", req.LatVal()))
+		params.Set("lon", fmt.Sprintf("%f", req.LonVal()))
 	}
 	return fmt.Sprintf("%s/forecast?%s", p.baseURL, params.Encode())
 }

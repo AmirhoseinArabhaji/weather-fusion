@@ -141,9 +141,30 @@ type ConsensusResult struct {
 
 // WeatherRequest carries the inbound query parameters.
 type WeatherRequest struct {
-	City  string  `form:"city" binding:"required_without=Lat"`
-	Lat   float64 `form:"lat"`
-	Lon   float64 `form:"lon"`
-	Days  int     `form:"days" binding:"omitempty,min=1,max=14"`
-	Units string  `form:"units" binding:"omitempty,oneof=standard metric imperial"` // defaults to metric per provider
+	City  string   `form:"city" binding:"required_without=Lat"`
+	Lat   *float64 `form:"lat"  binding:"omitempty,required_with=Lon,latitude"`
+	Lon   *float64 `form:"lon"  binding:"omitempty,required_with=Lat,longitude"`
+	Days  int      `form:"days" binding:"omitempty,min=1,max=14"`
+	Units string   `form:"units" binding:"omitempty,oneof=standard metric imperial"` // defaults to metric per provider
+}
+
+// HasCoordinates reports whether both latitude and longitude are provided.
+func (r WeatherRequest) HasCoordinates() bool {
+	return r.Lat != nil && r.Lon != nil
+}
+
+// LatVal returns latitude or 0 if nil.
+func (r WeatherRequest) LatVal() float64 {
+	if r.Lat != nil {
+		return *r.Lat
+	}
+	return 0
+}
+
+// LonVal returns longitude or 0 if nil.
+func (r WeatherRequest) LonVal() float64 {
+	if r.Lon != nil {
+		return *r.Lon
+	}
+	return 0
 }

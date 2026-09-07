@@ -296,8 +296,8 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 // resolveLocation prefers req.Lat/Lon; falls back to geocoding req.City via
 // the same free Open-Meteo endpoint the openmeteo provider uses.
 func (p *Provider) resolveLocation(ctx context.Context, req models.WeatherRequest) (lat, lon float64, city string, err error) {
-	if req.Lat != 0 || req.Lon != 0 {
-		return req.Lat, req.Lon, req.City, nil
+	if req.HasCoordinates() {
+		return req.LatVal(), req.LonVal(), req.City, nil
 	}
 	if req.City == "" {
 		return 0, 0, "", fmt.Errorf("city or lat/lon required")

@@ -230,8 +230,8 @@ func (p *Provider) buildURL(req models.WeatherRequest, endpoint string, count in
 	if req.City != "" {
 		params.Set("city", req.City)
 	} else {
-		params.Set("lat", strconv.FormatFloat(req.Lat, 'f', -1, 64))
-		params.Set("lon", strconv.FormatFloat(req.Lon, 'f', -1, 64))
+		params.Set("lat", strconv.FormatFloat(req.LatVal(), 'f', -1, 64))
+		params.Set("lon", strconv.FormatFloat(req.LonVal(), 'f', -1, 64))
 	}
 
 	units := "M"

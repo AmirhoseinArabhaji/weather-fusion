@@ -170,7 +170,7 @@ func cityOrCoords(req models.WeatherRequest) string {
 	if req.City != "" {
 		return req.City
 	}
-	return fmt.Sprintf("%f,%f", req.Lat, req.Lon)
+	return fmt.Sprintf("%f,%f", req.LatVal(), req.LonVal())
 }
 
 // get performs a GET request and returns the raw response body. Non-2xx

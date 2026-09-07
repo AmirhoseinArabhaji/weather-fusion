@@ -223,7 +223,7 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 func (p *Provider) buildURL(req models.WeatherRequest, endpoint, timesteps string) string {
 	location := req.City
 	if location == "" {
-		location = fmt.Sprintf("%f,%f", req.Lat, req.Lon)
+		location = fmt.Sprintf("%f,%f", req.LatVal(), req.LonVal())
 	}
 
 	units := "metric"
