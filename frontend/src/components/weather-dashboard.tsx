@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import Image from 'next/image';
 import { useLocation } from '@/hooks/use-location';
 import { useWeatherStream } from '@/hooks/use-weather-stream';
 import { useForecastStream } from '@/hooks/use-forecast-stream';
@@ -35,7 +36,7 @@ export default function WeatherDashboard() {
   const [units, setUnits] = useState<Units>('C');
   const [theme, setTheme] = useState<Theme>('light');
   const [rateLimitNoticeDismissed, setRateLimitNoticeDismissed] = useState(false);
-  const [rateLimitToastVisible, setRateLimitToastVisible] = useState(false);
+  const [dismissedRateLimitKey, setDismissedRateLimitKey] = useState<string | null>(null);
 
   // Desktop layout is untouched below — isMobile only swaps in narrower
   // values at the handful of spots that actually get cramped on a phone.
@@ -68,11 +69,11 @@ export default function WeatherDashboard() {
   const stream = useWeatherStream(locationParams);
   const forecast = useForecastStream(locationParams ? { ...locationParams, days: 5 } : null);
 
-  useEffect(() => {
-    if (stream.rateLimited || forecast.rateLimited) {
-      setRateLimitToastVisible(true);
-    }
-  }, [stream.rateLimited, forecast.rateLimited]);
+  const currentRateLimitKey =
+    stream.rateLimited || forecast.rateLimited
+      ? `${locationParams?.city ?? ''}:${locationParams?.lat ?? ''}:${locationParams?.lon ?? ''}`
+      : null;
+  const rateLimitToastVisible = currentRateLimitKey != null && currentRateLimitKey !== dismissedRateLimitKey;
 
   const dark = theme === 'dark';
   const t = themeTokens(dark);
@@ -247,12 +248,13 @@ export default function WeatherDashboard() {
         {/* Nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, marginBottom: 22, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-            <img
+            <Image
               src="/icon.png"
               alt="Weather Fusion"
-              width={34}
-              height={34}
-              style={{ width: 50, height: 50, borderRadius: '50%', boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)' }}
+              width={50}
+              height={50}
+              priority
+              style={{ borderRadius: '50%', boxShadow: '0 0 22px oklch(0.6 0.16 250 / 0.5)' }}
             />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -772,7 +774,7 @@ export default function WeatherDashboard() {
         <Toast
           dark={dark}
           message="You've checked a lot of new locations recently. please slow down and try again shortly."
-          onDone={() => setRateLimitToastVisible(false)}
+          onDone={() => setDismissedRateLimitKey(currentRateLimitKey)}
         />
       )}
     </div>

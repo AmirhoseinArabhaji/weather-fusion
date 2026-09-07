@@ -64,7 +64,11 @@ export function useForecastStream(params: ForecastStreamParams | null): Forecast
     const controller = new AbortController();
     const query = buildStreamQuery({ city, lat, lon, units, days });
 
-    setState({ ...IDLE_STATE, status: 'connecting' });
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setState({ ...IDLE_STATE, status: 'connecting' });
+      }
+    });
 
     void streamSSE(
       `${API_BASE_URL}/api/v1/weather/forecast?${query}`,

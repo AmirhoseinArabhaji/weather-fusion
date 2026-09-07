@@ -58,7 +58,11 @@ export function useWeatherStream(params: WeatherStreamParams | null): WeatherStr
     const controller = new AbortController();
     const query = buildStreamQuery({ city, lat, lon, units });
 
-    setState({ ...IDLE_STATE, status: 'connecting' });
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setState({ ...IDLE_STATE, status: 'connecting' });
+      }
+    });
 
     void streamSSE(
       `${API_BASE_URL}/api/v1/weather/current?${query}`,
