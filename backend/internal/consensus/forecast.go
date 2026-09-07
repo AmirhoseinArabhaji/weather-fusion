@@ -15,6 +15,7 @@ import (
 func MergeDaily(forecasts []*models.ProviderForecast) []models.DailyForecast {
 	type bucket struct {
 		date       time.Time
+		hasOffset  bool
 		tempMins   []float64
 		tempMaxs   []float64
 		humidities []float64
@@ -58,11 +59,16 @@ func MergeDaily(forecasts []*models.ProviderForecast) []models.DailyForecast {
 				localMidnight := time.Date(shifted.Year(), shifted.Month(), shifted.Day(), 0, 0, 0, 0, time.UTC)
 				b = &bucket{
 					date:       localMidnight.Add(-shift),
+					hasOffset:  f.UTCOffsetSeconds != nil,
 					conditions: map[models.WeatherCondition]int{},
 					descByCond: map[models.WeatherCondition]string{},
 				}
 				buckets[key] = b
 				order = append(order, key)
+			} else if !b.hasOffset && f.UTCOffsetSeconds != nil {
+				localMidnight := time.Date(shifted.Year(), shifted.Month(), shifted.Day(), 0, 0, 0, 0, time.UTC)
+				b.date = localMidnight.Add(-shift)
+				b.hasOffset = true
 			}
 			b.tempMins = append(b.tempMins, d.TempMin)
 			b.tempMaxs = append(b.tempMaxs, d.TempMax)
@@ -178,6 +184,9 @@ func mean(vals []float64) float64 {
 }
 
 func minOf(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
 	m := vals[0]
 	for _, v := range vals[1:] {
 		if v < m {
@@ -188,6 +197,9 @@ func minOf(vals []float64) float64 {
 }
 
 func maxOf(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
 	m := vals[0]
 	for _, v := range vals[1:] {
 		if v > m {
