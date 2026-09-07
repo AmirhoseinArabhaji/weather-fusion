@@ -140,6 +140,9 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 		observedAt = time.Now().UTC()
 	}
 
+	temp := convertTemp(d.AirTemperature, req.Units)
+	wind := convertWind(d.WindSpeed, req.Units)
+
 	return &models.WeatherObservation{
 		Location: models.Location{
 			City:      city,
@@ -147,11 +150,11 @@ func (p *Provider) FetchCurrent(ctx context.Context, req models.WeatherRequest) 
 			Longitude: lon,
 		},
 		Provider:    providerName,
-		Temperature: d.AirTemperature,
-		FeelsLike:   d.AirTemperature, // Locationforecast doesn't report an apparent temperature
+		Temperature: temp,
+		FeelsLike:   temp, // Locationforecast doesn't report an apparent temperature
 		Humidity:    int(d.RelativeHumidity),
 		Pressure:    d.AirPressureAtSeaLevel,
-		WindSpeed:   d.WindSpeed,
+		WindSpeed:   wind,
 		WindDir:     int(d.WindFromDirection),
 		PrecipProb:  entry.precipProb(),
 		Condition:   mapSymbolCode(entry.symbolCode()),
@@ -243,10 +246,10 @@ func (p *Provider) FetchForecast(ctx context.Context, req models.WeatherRequest)
 		acc := days[key]
 		forecast.Days = append(forecast.Days, models.DailyForecast{
 			Date:        acc.date,
-			TempMin:     acc.tempMin,
-			TempMax:     acc.tempMax,
+			TempMin:     convertTemp(acc.tempMin, req.Units),
+			TempMax:     convertTemp(acc.tempMax, req.Units),
 			Humidity:    int(acc.humiditySum / float64(acc.count)),
-			WindSpeed:   acc.windSum / float64(acc.count),
+			WindSpeed:   convertWind(acc.windSum/float64(acc.count), req.Units),
 			PrecipProb:  boolToProb(acc.precipSum > 0),
 			Condition:   mapSymbolCode(acc.noonSymbol),
 			Description: describeSymbolCode(acc.noonSymbol),
@@ -284,13 +287,27 @@ func (p *Provider) FetchHourly(ctx context.Context, req models.WeatherRequest) (
 		}
 		hourly.Hours = append(hourly.Hours, models.HourlyForecast{
 			Time:        t,
-			Temperature: e.Data.Instant.Details.AirTemperature,
+			Temperature: convertTemp(e.Data.Instant.Details.AirTemperature, req.Units),
 			PrecipProb:  e.precipProb(),
 			Condition:   mapSymbolCode(e.symbolCode()),
 			Description: describeSymbolCode(e.symbolCode()),
 		})
 	}
 	return hourly, nil
+}
+
+func convertTemp(c float64, units string) float64 {
+	if units == "imperial" {
+		return (c * 9.0 / 5.0) + 32.0
+	}
+	return c
+}
+
+func convertWind(ms float64, units string) float64 {
+	if units == "imperial" {
+		return ms * 2.236936
+	}
+	return ms
 }
 
 // resolveLocation prefers req.Lat/Lon; falls back to geocoding req.City via
