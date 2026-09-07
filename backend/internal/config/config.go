@@ -46,6 +46,13 @@ type Config struct {
 	MetnoBaseURL          string
 	MetnoUserAgent        string
 
+	LLMProvider string
+
+	OmniRouteBaseURL   string
+	OmniRouteAPIKey    string
+	OmniRouteModel     string
+	OmniRouteMaxTokens int
+
 	GeminiAPIKey    string
 	GeminiModel     string
 	GeminiMaxTokens int
@@ -100,6 +107,13 @@ func Load() (*Config, error) {
 
 		MetnoBaseURL:   getEnv("METNO_BASE_URL", "https://api.met.no/weatherapi/locationforecast/2.0"),
 		MetnoUserAgent: getEnv("METNO_USER_AGENT", "weather-fusion github.com/amirhosein/weather-fusion"),
+
+		LLMProvider: getEnv("LLM_PROVIDER", "omniroute"),
+
+		OmniRouteBaseURL:   getEnv("OMNIROUTE_BASE_URL", "https://omni.amirhosein.me/v1"),
+		OmniRouteAPIKey:    getEnv("OMNIROUTE_API_KEY", ""),
+		OmniRouteModel:     getEnv("OMNIROUTE_MODEL", "gpt-4o-mini"),
+		OmniRouteMaxTokens: getEnvInt("OMNIROUTE_MAX_TOKENS", 512),
 
 		GeminiAPIKey:    getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:     getEnv("GEMINI_MODEL", "gemini-flash-latest"),

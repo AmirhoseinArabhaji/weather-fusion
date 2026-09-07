@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 	"github.com/amirhosein/weather-fusion/internal/config"
 	"github.com/amirhosein/weather-fusion/internal/geocoding/photon"
 	"github.com/amirhosein/weather-fusion/internal/handlers"
+	"github.com/amirhosein/weather-fusion/internal/llm"
 	"github.com/amirhosein/weather-fusion/internal/llm/gemini"
+	"github.com/amirhosein/weather-fusion/internal/llm/omniroute"
 	"github.com/amirhosein/weather-fusion/internal/providers"
 	"github.com/amirhosein/weather-fusion/internal/providers/metno"
 	"github.com/amirhosein/weather-fusion/internal/providers/openmeteo"
@@ -62,7 +65,7 @@ func Run() {
 
 	// Build weather providers, LLM client, and wire the HTTP router
 	weatherProviders := buildProviders(cfg, log)
-	llmClient := gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiMaxTokens, log)
+	llmClient := buildLLM(cfg, log)
 	geocoder := photon.New(log)
 	router := handlers.NewRouter(cfg, log, weatherProviders, llmClient, geocoder, cache)
 
@@ -110,5 +113,15 @@ func buildProviders(cfg *config.Config, log *slog.Logger) []providers.WeatherPro
 		tomorrowio.New(cfg.TomorrowIOAPIKey, cfg.TomorrowIOBaseURL, log),
 		weatherbit.New(cfg.WeatherbitAPIKey, cfg.WeatherbitBaseURL, log),
 		metno.New("", cfg.MetnoBaseURL, cfg.MetnoUserAgent, log),
+	}
+}
+
+// buildLLM constructs the LLM service based on configured provider.
+func buildLLM(cfg *config.Config, log *slog.Logger) llm.LLMService {
+	switch strings.ToLower(cfg.LLMProvider) {
+	case "gemini":
+		return gemini.New(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiMaxTokens, log)
+	default:
+		return omniroute.New(cfg.OmniRouteBaseURL, cfg.OmniRouteAPIKey, cfg.OmniRouteModel, cfg.OmniRouteMaxTokens, log)
 	}
 }
