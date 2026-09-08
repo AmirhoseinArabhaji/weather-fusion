@@ -17,15 +17,6 @@ import (
 
 const defaultModel = "gpt-4o-mini"
 
-const summarizeSystemPrompt = `You are a weather data interpreter, not a forecaster. ` +
-	`Explain the given consensus weather reading in plain, concise language for a general ` +
-	`audience. Mention provider agreement/disagreement only if it's notable. Do not invent ` +
-	`data or predict beyond what's given. Keep it to 2-3 sentences.`
-
-const analyzeSystemPrompt = `You are a weather data interpreter, not a forecaster. ` +
-	`Given historical and forecast weather data, describe the notable trend in plain language. ` +
-	`Do not invent data. Keep it to 2-3 sentences.`
-
 // Client is the OpenAI-compatible OmniRoute implementation of llm.LLMService.
 type Client struct {
 	baseURL   string
@@ -54,11 +45,8 @@ func New(baseURL, apiKey, model string, maxTokens int, log *slog.Logger) llm.LLM
 func (c *Client) ModelName() string { return c.model }
 
 func (c *Client) Summarize(ctx context.Context, req llm.SummarizeRequest) (*llm.LLMResponse, error) {
-	prompt := fmt.Sprintf(
-		"City: %s\nTemperature: %.1f°C\nCondition: %s\nDetails: %s",
-		req.City, req.Temperature, req.Condition, req.Description,
-	)
-	return c.generate(ctx, summarizeSystemPrompt, prompt)
+	prompt := llm.FormatSummarizePrompt(req)
+	return c.generate(ctx, llm.SummarizeSystemPrompt, prompt)
 }
 
 func (c *Client) Analyze(ctx context.Context, req llm.AnalyzeRequest) (*llm.LLMResponse, error) {
@@ -70,7 +58,7 @@ func (c *Client) Analyze(ctx context.Context, req llm.AnalyzeRequest) (*llm.LLMR
 	if err != nil {
 		return nil, fmt.Errorf("omniroute: marshal analyze input: %w", err)
 	}
-	return c.generate(ctx, analyzeSystemPrompt, string(data))
+	return c.generate(ctx, llm.AnalyzeSystemPrompt, string(data))
 }
 
 func (c *Client) IsAvailable(ctx context.Context) bool {

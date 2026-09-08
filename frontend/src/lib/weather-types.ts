@@ -36,6 +36,7 @@ export interface WeatherObservation {
 export interface ConsensusResult {
   location: Location;
   temperature: number;
+  feels_like: number;
   temp_std_dev: number;
   humidity: number;
   wind_speed: number;

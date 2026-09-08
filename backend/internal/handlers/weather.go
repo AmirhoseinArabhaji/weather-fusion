@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -137,6 +136,29 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	emit("consensus", result)
 	c.Writer.Flush()
 
+	var minTemp, maxTemp float64
+	var providerReadings []llm.ProviderReading
+	if len(result.Providers) > 0 {
+		minTemp = result.Providers[0].Temperature
+		maxTemp = result.Providers[0].Temperature
+		providerReadings = make([]llm.ProviderReading, len(result.Providers))
+		for i, p := range result.Providers {
+			if p.Temperature < minTemp {
+				minTemp = p.Temperature
+			}
+			if p.Temperature > maxTemp {
+				maxTemp = p.Temperature
+			}
+			providerReadings[i] = llm.ProviderReading{
+				Provider:    p.Provider,
+				Temperature: p.Temperature,
+				Condition:   string(p.Condition),
+				Humidity:    p.Humidity,
+				PrecipProb:  p.PrecipProb,
+			}
+		}
+	}
+
 	// Sent separately from "consensus" so the numeric data isn't held up
 	// waiting on the LLM call. Always fires exactly once (summary, error, or
 	// "unavailable") so the client has a reliable signal to stop listening.
@@ -145,8 +167,17 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 		summary, err := h.llm.Summarize(ctx, llm.SummarizeRequest{
 			City:        result.Location.City,
 			Temperature: result.Temperature,
+			FeelsLike:   result.FeelsLike,
+			TempMin:     minTemp,
+			TempMax:     maxTemp,
+			TempSpread:  maxTemp - minTemp,
+			TempStdDev:  result.TempStdDev,
+			Humidity:    result.Humidity,
+			WindSpeed:   result.WindSpeed,
+			PrecipProb:  result.PrecipProb,
 			Condition:   string(result.Condition),
-			Description: fmt.Sprintf("%.0f%% confidence, ±%.1f° spread across %d providers", result.Confidence*100, result.TempStdDev, len(result.Providers)),
+			Confidence:  result.Confidence,
+			Providers:   providerReadings,
 		})
 		if err != nil {
 			h.log.WarnContext(ctx, "llm summarize failed", "error", err)

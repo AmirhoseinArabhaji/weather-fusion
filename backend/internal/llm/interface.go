@@ -3,13 +3,31 @@ package llm
 
 import "context"
 
+// ProviderReading carries one provider's observed metrics for LLM synthesis.
+type ProviderReading struct {
+	Provider    string  `json:"provider"`
+	Temperature float64 `json:"temperature"`
+	Condition   string  `json:"condition"`
+	Humidity    int     `json:"humidity"`
+	PrecipProb  float64 `json:"precip_prob"`
+}
+
 // SummarizeRequest carries the input for a weather summary generation.
 type SummarizeRequest struct {
-	City        string
-	Temperature float64
-	Condition   string
-	Description string
-	// Add more fields as needed (forecast, history, etc.)
+	City        string            `json:"city"`
+	Temperature float64           `json:"temperature"`
+	FeelsLike   float64           `json:"feels_like"`
+	TempMin     float64           `json:"temp_min"`
+	TempMax     float64           `json:"temp_max"`
+	TempSpread  float64           `json:"temp_spread"`
+	TempStdDev  float64           `json:"temp_std_dev"`
+	Humidity    float64           `json:"humidity"`
+	WindSpeed   float64           `json:"wind_speed"`
+	PrecipProb  float64           `json:"precip_prob"`
+	Condition   string            `json:"condition"`
+	Confidence  float64           `json:"confidence"`
+	Description string            `json:"description,omitempty"`
+	Providers   []ProviderReading `json:"providers,omitempty"`
 }
 
 // AnalyzeRequest carries structured weather data for trend analysis.

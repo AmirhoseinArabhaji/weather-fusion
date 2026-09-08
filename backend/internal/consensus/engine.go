@@ -20,6 +20,7 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	}
 
 	avgTemp, stdDev := temperatureStats(observations)
+	avgFeelsLike := avgField(observations, func(o *models.WeatherObservation) float64 { return o.FeelsLike })
 	avgHumidity := avgField(observations, func(o *models.WeatherObservation) float64 { return float64(o.Humidity) })
 	avgWind := avgField(observations, func(o *models.WeatherObservation) float64 { return o.WindSpeed })
 	avgPrecip := avgPrecipProb(observations)
@@ -29,6 +30,7 @@ func Merge(observations []*models.WeatherObservation, totalProviders int) *model
 	return &models.ConsensusResult{
 		Location:    bestLocation(observations),
 		Temperature: avgTemp,
+		FeelsLike:   avgFeelsLike,
 		TempStdDev:  stdDev,
 		Humidity:    avgHumidity,
 		WindSpeed:   avgWind,

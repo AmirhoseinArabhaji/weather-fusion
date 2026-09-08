@@ -124,15 +124,14 @@ type ConsensusHourly struct {
 // ConsensusResult is the merged output of all provider observations for one location.
 // This is what the consensus engine produces and what the API returns to the client.
 type ConsensusResult struct {
-	Location    Location         `json:"location"`
-	Temperature float64          `json:"temperature"`  // average °C
-	TempStdDev  float64          `json:"temp_std_dev"` // spread between providers
-	Humidity    float64          `json:"humidity"`     // average percent
-	WindSpeed   float64          `json:"wind_speed"`   // average m/s
-	PrecipProb  float64          `json:"precip_prob"`  // average 0–1
-	Condition   WeatherCondition `json:"condition"`    // majority vote
-	// IsDay is a majority vote among providers that report one; defaults to
-	// true when none do (see consensus.majorityIsDay).
+	Location    Location             `json:"location"`
+	Temperature float64              `json:"temperature"`  // average °C
+	FeelsLike   float64              `json:"feels_like"`   // average °C
+	TempStdDev  float64              `json:"temp_std_dev"` // spread between providers
+	Humidity    float64              `json:"humidity"`     // average percent
+	WindSpeed   float64              `json:"wind_speed"`   // average m/s
+	PrecipProb  float64              `json:"precip_prob"`  // average 0–1
+	Condition   WeatherCondition     `json:"condition"`    // majority vote
 	IsDay       bool                 `json:"is_day"`
 	Confidence  float64              `json:"confidence"` // 0–1 based on agreement
 	Providers   []WeatherObservation `json:"providers"`  // individual readings
