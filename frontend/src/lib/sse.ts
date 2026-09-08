@@ -80,21 +80,23 @@ export async function streamSSE(url: string, handlers: SSEHandlers, signal: Abor
   const decoder = new TextDecoder();
   let buffer = '';
   try {
+    const boundaryRegex = /\r?\n\r?\n/;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      let frameEnd: number;
-      while ((frameEnd = buffer.indexOf('\n\n')) !== -1) {
-        const frame = buffer.slice(0, frameEnd);
-        buffer = buffer.slice(frameEnd + 2);
+      let match: RegExpExecArray | null;
+      while ((match = boundaryRegex.exec(buffer)) !== null) {
+        const frame = buffer.slice(0, match.index);
+        buffer = buffer.slice(match.index + match[0].length);
 
         let event = 'message';
         const dataLines: string[] = [];
-        for (const line of frame.split('\n')) {
-          if (line.startsWith('event:')) event = line.slice(6).trim();
-          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        for (const line of frame.split(/\r?\n/)) {
+          const trimmed = line.trimEnd();
+          if (trimmed.startsWith('event:')) event = trimmed.slice(6).trim();
+          else if (trimmed.startsWith('data:')) dataLines.push(trimmed.slice(5).trim());
         }
         if (dataLines.length > 0) handlers.onEvent(event, dataLines.join('\n'));
       }
