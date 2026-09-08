@@ -216,7 +216,7 @@ export default function WeatherDashboard() {
   })();
   const tempSpread = temps.length > 0 ? (Math.max(...temps) - Math.min(...temps)).toFixed(1) : '0.0';
   const rainRangeLabel = rains.length > 0 ? `${Math.min(...rains)}–${Math.max(...rains)}%` : '—';
-  const rainDisagreementNote = rainConfidence.label === 'Low' ? 'Wide disagreement on rain' : 'Providers broadly agree';
+  const rainDisagreementNote = rainConfidence.label === 'Low' ? 'Wide disagreement on rain today' : 'Providers broadly agree on rain today';
 
   const llmSummary =
     stream.status === 'error'
@@ -524,7 +524,7 @@ export default function WeatherDashboard() {
                 </div>
                 <div style={{ flex: 1, background: rainConfidence.soft, border: `1px solid ${rainConfidence.ring}`, borderRadius: 15, padding: '14px 16px' }}>
                   <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: rainConfidence.strong, marginBottom: 8 }}>
-                    Precipitation
+                    Rain Today
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
                     <div style={{ fontSize: 21, fontWeight: 700, color: rainConfidence.strong }}>{rainConfidence.label}</div>
@@ -760,7 +760,7 @@ export default function WeatherDashboard() {
               </div>
             ))}
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.text3, marginTop: 14, letterSpacing: '0.05em' }}>
-              Bar = rain probability reported by that provider
+              {"Bar = today's rain probability forecast by each provider"}
             </div>
           </div>
         </div>
