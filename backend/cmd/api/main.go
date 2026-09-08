@@ -71,11 +71,10 @@ func Run() {
 
 	// Configure HTTP server
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.AppPort),
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              fmt.Sprintf(":%s", cfg.AppPort),
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Start server in a non-blocking goroutine

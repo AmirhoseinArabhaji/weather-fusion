@@ -73,6 +73,9 @@ func (h *WeatherHandler) Current(c *gin.Context) {
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 
+	rc := http.NewResponseController(c.Writer)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	if h.tryServeFromCache(c, key) {
 		return
 	}
@@ -246,6 +249,9 @@ func (h *WeatherHandler) Forecast(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	rc := http.NewResponseController(c.Writer)
+	_ = rc.SetWriteDeadline(time.Time{})
 
 	if h.tryServeFromCache(c, key) {
 		return
